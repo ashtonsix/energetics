@@ -4,7 +4,8 @@ import {useDebouncedCallback} from 'use-debounce'
 import {useEffect, useRef, useState} from 'react'
 import Vector2 from './Vector2'
 
-function collide(p1, p2, mix, particleSpeed) {
+// adapted from https://github.com/henshmi/Classic-8-Ball-Pool/blob/ede58b77bb7d5b9d3a5d7ccf4c93df4e8437d3b9/src/game-objects/game-world.ts#L160
+function collide(p1, p2, particleSpeed) {
   const pr2 = p1.r + p2.r
 
   let p1p = new Vector2(p1.x, p1.y)
@@ -55,16 +56,25 @@ function collide(p1, p2, mix, particleSpeed) {
   p1v = v1nTag.add(v1tTag)
   p2v = v2nTag.add(v2tTag)
 
-  // Mix velocities
-  const _p1v = p1v.mix(p2v, 1 - mix)
-  const _p2v = p2v.mix(p1v, 1 - mix)
-  _p1v.multBy(particleSpeed / _p1v.length)
-  _p2v.multBy(particleSpeed / _p2v.length)
+  // Reset velocity magnitude
+  p1v.multBy(particleSpeed / p1v.length)
+  p2v.multBy(particleSpeed / p2v.length)
 
-  p1.vx = _p1v.x
-  p1.vy = _p1v.y
-  p2.vx = _p2v.x
-  p2.vy = _p2v.y
+  p1.vx = p1v.x
+  p1.vy = p1v.y
+  p2.vx = p2v.x
+  p2.vy = p2v.y
+}
+
+function wallCollide(p, angle, particleSpeed) {
+  const p2 = {
+    r: p.r,
+    x: p.x + Math.cos(angle) * p.r * 2,
+    y: p.y + Math.sin(angle) * p.r * 2,
+    vx: 0,
+    vy: 0,
+  }
+  return collide(p, p2, particleSpeed)
 }
 
 const Input = ({label, debounce, onChange, defaultValue}) => {
@@ -87,10 +97,9 @@ const Particles = () => {
   const [ticker, setTicker] = useState(null)
   const [playing, setPlaying] = useState(false)
   const params = useRef({
-    bias: 5,
     particleCount: 1000,
-    particleSizeMin: 12,
-    particleSizeMax: 14,
+    particleSizeMin: 10,
+    particleSizeMax: 12,
     particleSpeed: 3,
   })
 
@@ -134,8 +143,10 @@ const Particles = () => {
       particle.anchor.set(0.5)
       particle.height = pr2
       particle.width = pr2
-      particle.x = Math.random() * (app.screen.width - pr2) + pr
-      particle.y = Math.random() * (app.screen.height - pr2) + pr
+      const distance = Math.random() ** 0.5 * (app.screen.width / 2 - 10)
+      const angle = Math.PI * 2 * Math.random()
+      particle.x = app.screen.width / 2 + Math.cos(angle) * distance
+      particle.y = app.screen.width / 2 + Math.sin(angle) * distance
       particle.rotation = rotation
 
       particle.r = pr
@@ -188,21 +199,14 @@ const Particles = () => {
         const p = particles[i]
         p.x += p.vx
         p.y += p.vy
-        if (p.x < p.r) {
-          p.vx = Math.abs(p.vx)
-          p.x = p.r
-        }
-        if (p.x > app.screen.width - p.r) {
-          p.vx = -Math.abs(p.vx)
-          p.x = app.screen.width - p.r
-        }
-        if (p.y < p.r) {
-          p.vy = Math.abs(p.vy)
-          p.y = p.r
-        }
-        if (p.y > app.screen.height - p.r) {
-          p.vy = -Math.abs(p.vy)
-          p.y = app.screen.height - p.r
+        const cx = app.screen.width / 2
+        const cy = app.screen.height / 2
+        const distanceFromCenter = ((p.x - cx) ** 2 + (p.y - cy) ** 2) ** 0.5
+        const maxDistance = app.screen.width / 2 - p.r - 10
+        if (distanceFromCenter > maxDistance) {
+          p.x = ((p.x - cx) * maxDistance) / distanceFromCenter + cx
+          p.y = ((p.y - cy) * maxDistance) / distanceFromCenter + cy
+          wallCollide(p, Math.atan2(p.y - cy, p.x - cx), $.particleSpeed)
         }
         p.rotation = Math.atan2(p.vy, p.vx)
 
@@ -221,12 +225,7 @@ const Particles = () => {
         for (let k = 0; k < candidates.length; k++) {
           let candidate = candidates[k]
           if (particle === candidate) continue
-          collide(
-            particle,
-            candidate,
-            $.bias / 100 || 0,
-            Math.max($.particleSpeed, 0.01)
-          )
+          collide(particle, candidate, Math.max($.particleSpeed, 0.1))
         }
       }
     })
@@ -288,14 +287,6 @@ const Particles = () => {
           Reset
         </button>
         <br />
-        <Input
-          label="Bias"
-          debounce={500}
-          defaultValue={params.current.bias}
-          onChange={(value) => {
-            params.current.bias = parseFloat(value) || 0
-          }}
-        />
         <Input
           label="Particle Count"
           debounce={500}
