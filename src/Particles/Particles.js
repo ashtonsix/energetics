@@ -131,19 +131,24 @@ const Particles = () => {
   })
 
   useInterval(() => {
-    if (!playing) return
+    const typing = [
+      inputs.current.particleCount,
+      inputs.current.particleSizeMin,
+      inputs.current.particleSizeMax,
+    ].includes(document.activeElement)
+    if (!playing || !params.current.spawnRate || typing) return
     const $ = params.current
     const old_sz = getSuggestedSize($.particleCount)
     const minMult = $.particleSizeMin / old_sz
     const maxMult = $.particleSizeMax / old_sz
-    $.particleCount += $.spawnRate / 10
+    $.particleCount = Math.min($.particleCount + $.spawnRate / 10, 10000)
     const sz = getSuggestedSize($.particleCount)
     $.particleSizeMin = sz * minMult
     $.particleSizeMax = sz * maxMult
-    if (Date.now() % 1000 < 100) setSuggestedSize(sz)
     inputs.current.particleCount.value = $.particleCount.toFixed(0)
     inputs.current.particleSizeMin.value = $.particleSizeMin.toFixed(2)
     inputs.current.particleSizeMax.value = $.particleSizeMax.toFixed(2)
+    if (Date.now() % 1000 < 200) setSuggestedSize(sz)
   }, 100)
 
   useEffect(() => {
@@ -166,7 +171,7 @@ const Particles = () => {
       height: app.screen.height,
     })
 
-    const spriteContainer = new PIXI.ParticleContainer(20000, {
+    const spriteContainer = new PIXI.ParticleContainer(10000, {
       scale: true,
       position: true,
       rotation: true,
