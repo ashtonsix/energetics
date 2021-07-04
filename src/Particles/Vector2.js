@@ -1,6 +1,4 @@
 // adapted from https://github.com/henshmi/Classic-8-Ball-Pool/blob/ede58b77bb7d5b9d3a5d7ccf4c93df4e8437d3b9/src/geom/vector2.ts
-const mix = (a, b, m) => a * m + b * (1 - m)
-
 export default class Vector2 {
   constructor(x, y) {
     this._x = x

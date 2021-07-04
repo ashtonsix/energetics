@@ -1,8 +1,9 @@
 import * as PIXI from 'pixi.js'
 import Quadtree from '@timohausmann/quadtree-js'
 import {useDebouncedCallback} from 'use-debounce'
-import {useEffect, useRef, useState} from 'react'
+import React, {useEffect, useRef, useState} from 'react'
 import Vector2 from './Vector2'
+import useInterval from '../useInterval'
 
 // adapted from https://github.com/henshmi/Classic-8-Ball-Pool/blob/ede58b77bb7d5b9d3a5d7ccf4c93df4e8437d3b9/src/game-objects/game-world.ts#L160
 function collide(p1, p2, particleSpeed) {
@@ -77,18 +78,34 @@ function wallCollide(p, angle, particleSpeed) {
   return collide(p, p2, particleSpeed)
 }
 
-const Input = ({label, debounce, onChange, defaultValue}) => {
-  const handleOnChange = useDebouncedCallback(onChange, debounce)
+const Input = React.forwardRef(
+  ({label, note, debounce, onChange, defaultValue}, ref) => {
+    const handleOnChange = useDebouncedCallback(onChange, debounce)
+    return (
+      <label style={{display: 'block'}}>
+        <span style={{fontSize: 48}}>{label}</span>
+        {!!note && <br />}
+        {!!note && <span style={{fontSize: 36}}>{note}</span>}
+        <br />
+        <input
+          ref={ref}
+          style={{fontSize: 48, width: 300}}
+          defaultValue={defaultValue}
+          onChange={(e) => handleOnChange(e.target.value)}
+        ></input>
+      </label>
+    )
+  }
+)
+
+const getSuggestedSize = (particleCount) => {
+  const windowSize = Math.min(window.innerWidth, window.innerHeight) - 50
+  const percentFilled = 0.6
   return (
-    <label style={{display: 'block', fontSize: 64}}>
-      <span>{label}</span>
-      <br />
-      <input
-        style={{fontSize: 64, width: 300}}
-        defaultValue={defaultValue}
-        onChange={(e) => handleOnChange(e.target.value)}
-      ></input>
-    </label>
+    windowSize *
+    (particleCount * percentFilled) ** 0.5 *
+    particleCount ** -1 *
+    0.5
   )
 }
 
@@ -96,12 +113,38 @@ const Particles = () => {
   const ref = useRef()
   const [ticker, setTicker] = useState(null)
   const [playing, setPlaying] = useState(false)
+  const [suggestedSize, setSuggestedSize] = useState(getSuggestedSize(1000))
   const params = useRef({
     particleCount: 1000,
-    particleSizeMin: 10,
-    particleSizeMax: 12,
+    particleSizeMin: suggestedSize * 0.9,
+    particleSizeMax: suggestedSize * 1.1,
     particleSpeed: 3,
+    spawnRate: 0,
+    freeze: false,
   })
+  const inputs = useRef({
+    particleCount: {},
+    particleSizeMin: {},
+    particleSizeMax: {},
+    particleSpeed: {},
+    spawnRate: {},
+  })
+
+  useInterval(() => {
+    if (!playing) return
+    const $ = params.current
+    const old_sz = getSuggestedSize($.particleCount)
+    const minMult = $.particleSizeMin / old_sz
+    const maxMult = $.particleSizeMax / old_sz
+    $.particleCount += $.spawnRate / 10
+    const sz = getSuggestedSize($.particleCount)
+    $.particleSizeMin = sz * minMult
+    $.particleSizeMax = sz * maxMult
+    if (Date.now() % 1000 < 100) setSuggestedSize(sz)
+    inputs.current.particleCount.value = $.particleCount.toFixed(0)
+    inputs.current.particleSizeMin.value = $.particleSizeMin.toFixed(2)
+    inputs.current.particleSizeMax.value = $.particleSizeMax.toFixed(2)
+  }, 100)
 
   useEffect(() => {
     const app = new PIXI.Application()
@@ -110,6 +153,7 @@ const Particles = () => {
     const resizeWindow = () => {
       const windowSize = Math.min(window.innerWidth, window.innerHeight) - 50
       app.renderer.resize(windowSize, windowSize)
+      setSuggestedSize(getSuggestedSize(params.current.particleCount))
     }
     resizeWindow()
     window.addEventListener('resize', resizeWindow)
@@ -122,7 +166,7 @@ const Particles = () => {
       height: app.screen.height,
     })
 
-    const spriteContainer = new PIXI.ParticleContainer(5000, {
+    const spriteContainer = new PIXI.ParticleContainer(20000, {
       scale: true,
       position: true,
       rotation: true,
@@ -161,13 +205,14 @@ const Particles = () => {
 
     const ticker = app.ticker.add(() => {
       const $ = params.current
-      if (particles.length > $.particleCount) {
-        const toRemove = particles.length - $.particleCount
+      const count = Math.round($.particleCount)
+      if (particles.length > count) {
+        const toRemove = particles.length - count
         for (let i = 0; i < toRemove; i++) particles[i].destroy()
         particles = particles.slice(toRemove)
       }
-      if (particles.length < $.particleCount) {
-        const toAdd = $.particleCount - particles.length
+      if (particles.length < count) {
+        const toAdd = count - particles.length
         for (let i = 0; i < toAdd; i++) addParticle()
       }
       if (particles.length) {
@@ -193,6 +238,8 @@ const Particles = () => {
           }
         }
       }
+
+      if ($.freeze) return
 
       quadtree.clear()
       for (let i = 0; i < particles.length; i++) {
@@ -293,26 +340,38 @@ const Particles = () => {
           defaultValue={params.current.particleCount}
           onChange={(value) => {
             params.current.particleCount = parseInt(value) || 0
+            setSuggestedSize(getSuggestedSize(params.current.particleCount))
+            params.current.freeze = true
             ticker.update()
+            params.current.freeze = false
           }}
+          ref={(input) => (inputs.current.particleCount = input)}
         />
         <Input
           label="Particle Size (min)"
+          note={'Suggested = ' + (suggestedSize * 0.9).toFixed(2)}
           debounce={500}
-          defaultValue={params.current.particleSizeMin}
+          defaultValue={params.current.particleSizeMin.toFixed(2)}
           onChange={(value) => {
             params.current.particleSizeMin = parseFloat(value) || 0
+            params.current.freeze = true
             ticker.update()
+            params.current.freeze = false
           }}
+          ref={(input) => (inputs.current.particleSizeMin = input)}
         />
         <Input
           label="Particle Size (max)"
+          note={'Suggested = ' + (suggestedSize * 1.1).toFixed(2)}
           debounce={500}
-          defaultValue={params.current.particleSizeMax}
+          defaultValue={params.current.particleSizeMax.toFixed(2)}
           onChange={(value) => {
             params.current.particleSizeMax = parseFloat(value) || 0
+            params.current.freeze = true
             ticker.update()
+            params.current.freeze = false
           }}
+          ref={(input) => (inputs.current.particleSizeMax = input)}
         />
         <Input
           label="Particle Speed"
@@ -321,6 +380,14 @@ const Particles = () => {
           onChange={(value) => {
             params.current.particleSpeed = parseFloat(value) || 0
             ticker.update()
+          }}
+        />
+        <Input
+          label="Spawn Rate"
+          debounce={500}
+          defaultValue={params.current.spawnRate}
+          onChange={(value) => {
+            params.current.spawnRate = parseFloat(value) || 0
           }}
         />
       </div>
