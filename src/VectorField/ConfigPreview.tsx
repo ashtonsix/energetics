@@ -49,7 +49,7 @@ export default function ConfigPreview({nonce, transferRadius, arc, flo}) {
     seed: -1,
     size: Math.floor(transferRadius + 0.5) * 2 + 1,
     transferRadius,
-    substances: [{name: 'A', arc, flo}],
+    substances: [{name: 'A', arc, flo: Math.min(flo, 0.99999)}],
     substanceAttractionMatrix: {},
     reactionParameters: {},
     reactions: [],
