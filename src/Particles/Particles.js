@@ -1,81 +1,137 @@
 import * as PIXI from 'pixi.js'
-import Quadtree from '@timohausmann/quadtree-js'
 import {useDebouncedCallback} from 'use-debounce'
 import React, {useEffect, useRef, useState} from 'react'
-import Vector2 from './Vector2'
 import useInterval from '../useInterval'
 
-// adapted from https://github.com/henshmi/Classic-8-Ball-Pool/blob/ede58b77bb7d5b9d3a5d7ccf4c93df4e8437d3b9/src/game-objects/game-world.ts#L160
-function collide(p1, p2, particleSpeed) {
-  const pr2 = p1.r + p2.r
-
-  let p1p = new Vector2(p1.x, p1.y)
-  let p1v = new Vector2(p1.vx, p1.vy)
-  let p2p = new Vector2(p2.x, p2.y)
-  let p2v = new Vector2(p2.vx, p2.vy)
-
-  // Find a normal vector
-  const n = p1p.subtract(p2p)
-
-  // Find distance
-  const dist = n.length
-
-  if (dist > pr2) {
-    return false
+class ParticleGrid {
+  areaSize = 10
+  cellSize = 1
+  length = 10
+  data = []
+  insert(value, x, y) {
+    x = Math.floor(x / this.cellSize)
+    y = Math.floor(y / this.cellSize)
+    const cell = this.data[y * this.length + x]
+    if (cell) cell.push(value)
   }
+  retrieve(x, y) {
+    const d = this.data
+    const l = this.length
+    x = Math.floor(x / this.cellSize)
+    y = Math.floor(y / this.cellSize)
+    // prettier-ignore
+    return [].concat(
+      x > 0     && y > 0     ? d[(y - 1) * l + (x - 1)] : [],
+                   y > 0     ? d[(y - 1) * l + (x)    ] : [],
+      x < l - 1 && y > 0     ? d[(y - 1) * l + (x + 1)] : [],
+      x > 0                  ? d[(y) * l     + (x - 1)] : [],
+      true                   ? d[(y) * l     + (x)    ] : [],
+      x < l - 1              ? d[(y) * l     + (x + 1)] : [],
+      x > 0     && y < l - 1 ? d[(y + 1) * l + (x - 1)] : [],
+                   y < l - 1 ? d[(y + 1) * l + (x)    ] : [],
+      x < l - 1 && y < l - 1 ? d[(y + 1) * l + (x + 1)] : [],
+    )
+  }
+  constructor(areaSize, cellSize) {
+    this.areaSize = areaSize
+    this.cellSize = cellSize
+    this.length = Math.ceil(areaSize / cellSize)
+    for (let i = 0; i < this.length ** 2; i++) {
+      this.data.push([])
+    }
+  }
+}
 
-  // Find minimum translation distance
-  const mtd = n.mult((pr2 - dist) / dist)
+const vec = {
+  $add(a, b) {
+    a[0] += b[0]
+    a[1] += b[1]
+    return a
+  },
+  add(a, b) {
+    return [a[0] + b[0], a[1] + b[1]]
+  },
+  $sub(a, b) {
+    a[0] -= b[0]
+    a[1] -= b[1]
+    return a
+  },
+  sub(a, b) {
+    return [a[0] - b[0], a[1] - b[1]]
+  },
+  $mult(a, b) {
+    a[0] *= b
+    a[1] *= b
+    return a
+  },
+  mult(a, b) {
+    return [a[0] * b, a[1] * b]
+  },
+  dot(a, b) {
+    return a[0] * b[0] + a[1] * b[1]
+  },
+  length(a) {
+    return (a[0] ** 2 + a[1] ** 2) ** 0.5
+  },
+  lengthLessThan(a, b) {
+    return a[0] ** 2 + a[1] ** 2 < b ** 2
+  },
+  $setLength(a, b) {
+    return vec.$mult(a, b / vec.length(a))
+  },
+  setLength(a, b) {
+    return vec.mult(a, b / vec.length(a))
+  },
+}
 
-  // Push-pull particles apart
-  p1p = p1p.add(mtd.mult(0.5))
-  p2p = p2p.subtract(mtd.mult(0.5))
-  p1.x = p1p.x
-  p1.y = p1p.y
-  p2.x = p2p.x
-  p2.y = p2p.y
+function collide(p1, p2, particleSpeed, wall = false) {
+  const radii = p1.r + p2.r
+  const normal = vec.$sub([p1.x, p1.y], [p2.x, p2.y])
+  if (!vec.lengthLessThan(normal, radii)) {
+    return
+  }
+  const pushAway = vec.setLength(normal, (radii - vec.length(normal)) / 2)
+  const p1p = vec.$add([p1.x, p1.y], pushAway)
+  const p2p = vec.$sub([p2.x, p2.y], pushAway)
 
-  // Find unit normal vector
-  const un = n.mult(1 / n.length)
+  const un = vec.$setLength(normal, 1)
+  const ut = [-un[1], un[0]]
 
-  // Find unit tangent vector
-  const ut = new Vector2(-un.y, un.x)
+  let p1v = [p1.vx, p1.vy]
+  let p2v = [p2.vx, p2.vy]
+  let temp = vec.$add(
+    vec.mult(un, vec.dot(un, p2v)),
+    vec.mult(ut, vec.dot(ut, p1v))
+  )
+  // prettier-ignore
+  p2v = vec.$add(
+    vec.mult(un, vec.dot(un, p1v)),
+    vec.mult(ut, vec.dot(ut, p2v))
+  )
+  if (wall) vec.setLength(temp, vec.length(temp) + vec.length(p2v))
+  p1v = temp
+  vec.$setLength(p1v, particleSpeed)
+  vec.$setLength(p2v, particleSpeed)
 
-  // Project velocities onto the unit normal and unit tangent vectors
-  const v1n = un.dot(p1v)
-  const v1t = ut.dot(p1v)
-  const v2n = un.dot(p2v)
-  const v2t = ut.dot(p2v)
-
-  // Convert the scalar normal and tangential velocities into vectors
-  const v1nTag = un.mult(v2n)
-  const v1tTag = ut.mult(v1t)
-  const v2nTag = un.mult(v1n)
-  const v2tTag = ut.mult(v2t)
-
-  // Update velocities
-  p1v = v1nTag.add(v1tTag)
-  p2v = v2nTag.add(v2tTag)
-
-  // Reset velocity magnitude
-  p1v.multBy(particleSpeed / p1v.length)
-  p2v.multBy(particleSpeed / p2v.length)
-
-  p1.vx = p1v.x
-  p1.vy = p1v.y
-  p2.vx = p2v.x
-  p2.vy = p2v.y
+  p1.x = p1p[0]
+  p1.y = p1p[1]
+  p1.vx = p1v[0]
+  p1.vy = p1v[1]
+  p2.x = p2p[0]
+  p2.y = p2p[1]
+  p2.vx = p2v[0]
+  p2.vy = p2v[1]
 }
 
 function wallCollide(p, angle, particleSpeed) {
   const p2 = {
-    r: p.r,
-    x: p.x + Math.cos(angle) * p.r * 2,
-    y: p.y + Math.sin(angle) * p.r * 2,
+    r: p.r * 0.01,
+    x: p.x + Math.cos(angle) * p.r,
+    y: p.y + Math.sin(angle) * p.r,
     vx: 0,
     vy: 0,
   }
-  return collide(p, p2, particleSpeed)
+  return collide(p, p2, particleSpeed, true)
 }
 
 const Input = React.forwardRef(
@@ -100,7 +156,7 @@ const Input = React.forwardRef(
 
 const getSuggestedSize = (particleCount) => {
   const windowSize = Math.min(window.innerWidth, window.innerHeight) - 50
-  const percentFilled = 0.6
+  const percentFilled = 0.7
   return (
     windowSize *
     (particleCount * percentFilled) ** 0.5 *
@@ -113,11 +169,11 @@ const Particles = () => {
   const ref = useRef()
   const [ticker, setTicker] = useState(null)
   const [playing, setPlaying] = useState(false)
-  const [suggestedSize, setSuggestedSize] = useState(getSuggestedSize(1000))
+  const [suggestedSize, setSuggestedSize] = useState(getSuggestedSize(500))
   const params = useRef({
-    particleCount: 1000,
-    particleSizeMin: suggestedSize * 0.9,
-    particleSizeMax: suggestedSize * 1.1,
+    particleCount: 500,
+    particleSizeMin: suggestedSize * 0.95,
+    particleSizeMax: suggestedSize * 1.05,
     particleSpeed: 3,
     spawnRate: 0,
     freeze: false,
@@ -141,7 +197,7 @@ const Particles = () => {
     const old_sz = getSuggestedSize($.particleCount)
     const minMult = $.particleSizeMin / old_sz
     const maxMult = $.particleSizeMax / old_sz
-    $.particleCount = Math.min($.particleCount + $.spawnRate / 10, 10000)
+    $.particleCount = Math.min($.particleCount + $.spawnRate / 10, 20000)
     const sz = getSuggestedSize($.particleCount)
     $.particleSizeMin = sz * minMult
     $.particleSizeMax = sz * maxMult
@@ -164,14 +220,14 @@ const Particles = () => {
     window.addEventListener('resize', resizeWindow)
 
     let particles = []
-    const quadtree = new Quadtree({
-      x: 0,
-      y: 0,
-      width: app.screen.width,
-      height: app.screen.height,
-    })
+    // const quadtree = new Quadtree({
+    //   x: 0,
+    //   y: 0,
+    //   width: app.screen.width,
+    //   height: app.screen.height,
+    // })
 
-    const spriteContainer = new PIXI.ParticleContainer(10000, {
+    const spriteContainer = new PIXI.ParticleContainer(20000, {
       scale: true,
       position: true,
       rotation: true,
@@ -246,7 +302,11 @@ const Particles = () => {
 
       if ($.freeze) return
 
-      quadtree.clear()
+      // quadtree.clear()
+      const particleGrid = new ParticleGrid(
+        app.screen.width,
+        params.current.particleSizeMax * 2
+      )
       for (let i = 0; i < particles.length; i++) {
         const p = particles[i]
         p.x += p.vx
@@ -262,17 +322,19 @@ const Particles = () => {
         }
         p.rotation = Math.atan2(p.vy, p.vx)
 
-        quadtree.insert(p)
+        // quadtree.insert(p)
+        particleGrid.insert(p, p.x, p.y)
       }
       for (let i = 0; i < particles.length; i++) {
         let particle = particles[i]
 
-        let candidates = quadtree.retrieve({
-          x: particle.x - particle.r,
-          y: particle.y - particle.r,
-          width: particle.r * 2,
-          height: particle.r * 2,
-        })
+        // let candidates = quadtree.retrieve({
+        //   x: particle.x - particle.r,
+        //   y: particle.y - particle.r,
+        //   width: particle.r * 2,
+        //   height: particle.r * 2,
+        // })
+        const candidates = particleGrid.retrieve(particle.x, particle.y)
 
         for (let k = 0; k < candidates.length; k++) {
           let candidate = candidates[k]
@@ -282,8 +344,14 @@ const Particles = () => {
       }
     })
     ticker.stop()
+    params.current.freeze = true
     ticker.update()
-    setTimeout(() => ticker.update(), 64)
+    params.current.freeze = false
+    setTimeout(() => {
+      params.current.freeze = true
+      ticker.update()
+      params.current.freeze = false
+    }, 64)
 
     setTicker(ticker)
 
@@ -354,7 +422,7 @@ const Particles = () => {
         />
         <Input
           label="Particle Size (min)"
-          note={'Suggested = ' + (suggestedSize * 0.9).toFixed(2)}
+          note={'Suggested = ' + (suggestedSize * 0.95).toFixed(2)}
           debounce={500}
           defaultValue={params.current.particleSizeMin.toFixed(2)}
           onChange={(value) => {
@@ -367,7 +435,7 @@ const Particles = () => {
         />
         <Input
           label="Particle Size (max)"
-          note={'Suggested = ' + (suggestedSize * 1.1).toFixed(2)}
+          note={'Suggested = ' + (suggestedSize * 1.05).toFixed(2)}
           debounce={500}
           defaultValue={params.current.particleSizeMax.toFixed(2)}
           onChange={(value) => {
