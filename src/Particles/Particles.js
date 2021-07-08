@@ -2,92 +2,16 @@ import * as PIXI from 'pixi.js'
 import {useDebouncedCallback} from 'use-debounce'
 import React, {useEffect, useRef, useState} from 'react'
 import useInterval from '../useInterval'
+import {
+  ParticleCollisionDetector,
+  BoundaryCollisionDetector,
+} from './CollisionDetectors'
+import vec from './vec'
 
-class ParticleGrid {
-  areaSize = 10
-  cellSize = 1
-  length = 10
-  data = []
-  insert(value, x, y) {
-    x = Math.floor(x / this.cellSize)
-    y = Math.floor(y / this.cellSize)
-    const cell = this.data[y * this.length + x]
-    if (cell) cell.push(value)
-  }
-  retrieve(x, y) {
-    const d = this.data
-    const l = this.length
-    x = Math.floor(x / this.cellSize)
-    y = Math.floor(y / this.cellSize)
-    // prettier-ignore
-    return [].concat(
-      x > 0     && y > 0     ? d[(y - 1) * l + (x - 1)] : [],
-                   y > 0     ? d[(y - 1) * l + (x)    ] : [],
-      x < l - 1 && y > 0     ? d[(y - 1) * l + (x + 1)] : [],
-      x > 0                  ? d[(y) * l     + (x - 1)] : [],
-      true                   ? d[(y) * l     + (x)    ] : [],
-      x < l - 1              ? d[(y) * l     + (x + 1)] : [],
-      x > 0     && y < l - 1 ? d[(y + 1) * l + (x - 1)] : [],
-                   y < l - 1 ? d[(y + 1) * l + (x)    ] : [],
-      x < l - 1 && y < l - 1 ? d[(y + 1) * l + (x + 1)] : [],
-    )
-  }
-  constructor(areaSize, cellSize) {
-    this.areaSize = areaSize
-    this.cellSize = cellSize
-    this.length = Math.ceil(areaSize / cellSize)
-    for (let i = 0; i < this.length ** 2; i++) {
-      this.data.push([])
-    }
-  }
-}
-
-const vec = {
-  $add(a, b) {
-    a[0] += b[0]
-    a[1] += b[1]
-    return a
-  },
-  add(a, b) {
-    return [a[0] + b[0], a[1] + b[1]]
-  },
-  $sub(a, b) {
-    a[0] -= b[0]
-    a[1] -= b[1]
-    return a
-  },
-  sub(a, b) {
-    return [a[0] - b[0], a[1] - b[1]]
-  },
-  $mult(a, b) {
-    a[0] *= b
-    a[1] *= b
-    return a
-  },
-  mult(a, b) {
-    return [a[0] * b, a[1] * b]
-  },
-  dot(a, b) {
-    return a[0] * b[0] + a[1] * b[1]
-  },
-  length(a) {
-    return (a[0] ** 2 + a[1] ** 2) ** 0.5
-  },
-  lengthLessThan(a, b) {
-    return a[0] ** 2 + a[1] ** 2 < b ** 2
-  },
-  $setLength(a, b) {
-    return vec.$mult(a, b / vec.length(a))
-  },
-  setLength(a, b) {
-    return vec.mult(a, b / vec.length(a))
-  },
-}
-
-function collide(p1, p2, particleSpeed, wall = false) {
+function collide(p1, p2, particleSpeed = null, boundary = false) {
   const radii = p1.r + p2.r
   const normal = vec.$sub([p1.x, p1.y], [p2.x, p2.y])
-  if (!vec.lengthLessThan(normal, radii)) {
+  if (!boundary && !vec.lengthLessThan(normal, radii)) {
     return
   }
   const pushAway = vec.setLength(normal, (radii - vec.length(normal)) / 2)
@@ -108,10 +32,14 @@ function collide(p1, p2, particleSpeed, wall = false) {
     vec.mult(un, vec.dot(un, p1v)),
     vec.mult(ut, vec.dot(ut, p2v))
   )
-  if (wall) vec.setLength(temp, vec.length(temp) + vec.length(p2v))
   p1v = temp
-  vec.$setLength(p1v, particleSpeed)
-  vec.$setLength(p2v, particleSpeed)
+  if (false) {
+    vec.$setLength(p1v, particleSpeed)
+    vec.$setLength(p2v, particleSpeed)
+  } else if (boundary) {
+    const l = vec.length([p1.vx, p1.vy]) + vec.length([p2.vx, p2.vy])
+    vec.$setLength(p1v, l)
+  }
 
   p1.x = p1p[0]
   p1.y = p1p[1]
@@ -123,9 +51,9 @@ function collide(p1, p2, particleSpeed, wall = false) {
   p2.vy = p2v[1]
 }
 
-function wallCollide(p, angle, particleSpeed) {
+function boundaryCollide(p, angle, particleSpeed) {
   const p2 = {
-    r: p.r * 0.01,
+    r: 0,
     x: p.x + Math.cos(angle) * p.r,
     y: p.y + Math.sin(angle) * p.r,
     vx: 0,
@@ -163,6 +91,31 @@ const getSuggestedSize = (particleCount) => {
     particleCount ** -1 *
     0.5
   )
+}
+
+const curve = (t) => {
+  const x = Math.cos(t * Math.PI * 2)
+  const y = Math.sin(t * Math.PI * 2)
+  return [Math.abs(x) ** 1 * Math.sign(x), Math.abs(y) ** 1 * Math.sign(y)]
+}
+
+const bc = new BoundaryCollisionDetector().addCurve(curve, true).finemesh
+const bc_data = []
+for (let i = 0; i < bc.data.length; i += 6) {
+  let [x, y, distance, nx, ny, type] = bc.data.slice(i, i + 6)
+  let xi = ((i / 6) % bc.length) / bc.length
+  let yi = Math.floor(i / 6 / bc.length) / bc.length
+  if (distance !== -1 && Math.random())
+    bc_data.push({
+      xi,
+      yi,
+      x,
+      y,
+      distance,
+      nx,
+      ny,
+      type,
+    })
 }
 
 const Particles = () => {
@@ -204,11 +157,11 @@ const Particles = () => {
     inputs.current.particleCount.value = $.particleCount.toFixed(0)
     inputs.current.particleSizeMin.value = $.particleSizeMin.toFixed(2)
     inputs.current.particleSizeMax.value = $.particleSizeMax.toFixed(2)
-    if (Date.now() % 1000 < 200) setSuggestedSize(sz)
+    if (Date.now() % 1000 < 100) setSuggestedSize(sz)
   }, 100)
 
   useEffect(() => {
-    const app = new PIXI.Application()
+    const app = new PIXI.Application({backgroundAlpha: 0})
     ref.current.appendChild(app.view)
 
     const resizeWindow = () => {
@@ -220,13 +173,6 @@ const Particles = () => {
     window.addEventListener('resize', resizeWindow)
 
     let particles = []
-    // const quadtree = new Quadtree({
-    //   x: 0,
-    //   y: 0,
-    //   width: app.screen.width,
-    //   height: app.screen.height,
-    // })
-
     const spriteContainer = new PIXI.ParticleContainer(20000, {
       scale: true,
       position: true,
@@ -302,8 +248,7 @@ const Particles = () => {
 
       if ($.freeze) return
 
-      // quadtree.clear()
-      const particleGrid = new ParticleGrid(
+      const particleGrid = new ParticleCollisionDetector(
         app.screen.width,
         params.current.particleSizeMax * 2
       )
@@ -318,22 +263,15 @@ const Particles = () => {
         if (distanceFromCenter > maxDistance) {
           p.x = ((p.x - cx) * maxDistance) / distanceFromCenter + cx
           p.y = ((p.y - cy) * maxDistance) / distanceFromCenter + cy
-          wallCollide(p, Math.atan2(p.y - cy, p.x - cx), $.particleSpeed)
+          boundaryCollide(p, Math.atan2(p.y - cy, p.x - cx), $.particleSpeed)
         }
         p.rotation = Math.atan2(p.vy, p.vx)
 
-        // quadtree.insert(p)
         particleGrid.insert(p, p.x, p.y)
       }
       for (let i = 0; i < particles.length; i++) {
         let particle = particles[i]
 
-        // let candidates = quadtree.retrieve({
-        //   x: particle.x - particle.r,
-        //   y: particle.y - particle.r,
-        //   width: particle.r * 2,
-        //   height: particle.r * 2,
-        // })
         const candidates = particleGrid.retrieve(particle.x, particle.y)
 
         for (let k = 0; k < candidates.length; k++) {
@@ -362,9 +300,100 @@ const Particles = () => {
     }
   }, [])
 
+  let arenaVertices = new Array(1000).fill(null).map((_, i) => curve(i / 1000))
+  let minX = arenaVertices[0][0]
+  let maxX = arenaVertices[0][0]
+  let minY = arenaVertices[0][1]
+  let maxY = arenaVertices[0][1]
+  for (let i = 0; i < arenaVertices.length; i++) {
+    const [x, y] = arenaVertices[i]
+    minX = Math.min(minX, x)
+    maxX = Math.max(maxX, x)
+    minY = Math.min(minY, y)
+    maxY = Math.max(maxY, y)
+  }
+  arenaVertices = arenaVertices.map(([x, y]) => [
+    (x - minX) / (maxX - minX),
+    (y - minY) / (maxY - minY),
+  ])
+
   return (
-    <div style={{display: 'flex'}}>
-      <div ref={ref} style={{padding: 10, marginLeft: -10}}></div>
+    <div style={{display: 'flex', flexWrap: 'wrap'}}>
+      <div
+        style={{
+          padding: 10,
+          marginLeft: -10,
+          width: '100%',
+          maxWidth: 'calc(100vh - 50px)',
+        }}
+      >
+        <div style={{position: 'relative', width: '100%', paddingTop: '100%'}}>
+          {/* for outline (TODO): https://stackoverflow.com/questions/9391945/outline-a-group-of-touching-shapes-with-svg */}
+          <svg
+            style={{
+              position: 'absolute',
+              top: '0',
+              left: '0',
+              width: '100%',
+              height: '100%',
+            }}
+            viewBox="0 0 100 100"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <rect fill="#222" width="100" height="100"></rect>
+            <polygon
+              fill="#000"
+              // stroke="#add8e6"
+              // strokeWidth={0.1}
+              // prettier-ignore
+              points={arenaVertices
+                .map(([x, y]) => (x * 96 + 2) + ',' + (y * 96 + 2))
+                .join(' ')}
+            />
+            {bc_data.map(({x, y, xi, yi, nx, distance, type}, i) => (
+              <>
+                {/* <rect
+                  key={i}
+                  x={xi * 96 + 2}
+                  y={yi * 96 + 2}
+                  height={sz * 96}
+                  width={sz * 96}
+                  fill={'lightBlue'}
+                  opacity={distance}
+                /> */}
+                <line
+                  x1={x * 96 + 2}
+                  y1={y * 96 + 2}
+                  x2={xi * 96 + 2 + bc.cellSize * 48}
+                  y2={yi * 96 + 2 + bc.cellSize * 48}
+                  stroke="lightBlue"
+                  strokeWidth={0.02}
+                />
+              </>
+            ))}
+            {/* {bc.polygon.map(([x, y], i) => (
+              <circle
+                key={i}
+                cx={x * 96 + 2}
+                cy={y * 96 + 2}
+                r={0.1}
+                fill="green"
+              />
+            ))} */}
+          </svg>
+          <div
+            ref={ref}
+            style={{
+              opacity: 0,
+              position: 'absolute',
+              top: '0',
+              left: '0',
+              width: '100%',
+              height: '100%',
+            }}
+          ></div>
+        </div>
+      </div>
       <div>
         <button
           onClick={() => {
