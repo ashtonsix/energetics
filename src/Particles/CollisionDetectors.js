@@ -1,23 +1,31 @@
+import {useEffect, useRef} from 'react'
 import vec from './vec'
 
+const clamp = (value, min, max) => {
+  return Math.min(Math.max(+value || 0, min), max)
+}
+
 class ParticleCollisionDetector {
-  areaSize = 10
-  cellSize = 1
+  cellSize = 0.01
   length = 10
   data = []
-  insert(value, x, y) {
+  insert(particle) {
+    let [x, y] = particle.position
     x = Math.floor(x / this.cellSize)
     y = Math.floor(y / this.cellSize)
     const cell = this.data[y * this.length + x]
-    if (cell) cell.push(value)
+    if (cell) cell.push(particle)
   }
-  retrieve(x, y) {
+  retrieve(particle) {
     const d = this.data
     const l = this.length
+    let [x, y] = particle.position
+    x = clamp(x, 0, 0.999999)
+    y = clamp(y, 0, 0.999999)
     x = Math.floor(x / this.cellSize)
     y = Math.floor(y / this.cellSize)
     // prettier-ignore
-    return [].concat(
+    const candidates = [].concat(
       x > 0     && y > 0     ? d[(y - 1) * l + (x - 1)] : [],
                    y > 0     ? d[(y - 1) * l + (x)    ] : [],
       x < l - 1 && y > 0     ? d[(y - 1) * l + (x + 1)] : [],
@@ -28,11 +36,11 @@ class ParticleCollisionDetector {
                    y < l - 1 ? d[(y + 1) * l + (x)    ] : [],
       x < l - 1 && y < l - 1 ? d[(y + 1) * l + (x + 1)] : [],
     )
+    return candidates
   }
-  constructor(areaSize, cellSize) {
-    this.areaSize = areaSize
-    this.cellSize = cellSize
-    this.length = Math.ceil(areaSize / cellSize)
+  constructor(maxParticleDiameter) {
+    this.cellSize = maxParticleDiameter
+    this.length = Math.ceil(1 / maxParticleDiameter)
     for (let i = 0; i < this.length ** 2; i++) {
       this.data.push([])
     }
@@ -102,23 +110,16 @@ class BoundaryCollisionDetector {
     INSIDE: 3,
     OUTSIDE: 4,
   }
-  addCurve(curve, inside) {
-    let polygon = new Array(5000).fill(null).map((_, i) => curve(i / 5000))
-    let minX = polygon[0][0]
-    let maxX = polygon[0][0]
-    let minY = polygon[0][1]
-    let maxY = polygon[0][1]
-    for (let i = 0; i < polygon.length; i++) {
-      const [x, y] = polygon[i]
-      minX = Math.min(minX, x)
-      maxX = Math.max(maxX, x)
-      minY = Math.min(minY, y)
-      maxY = Math.max(maxY, y)
-    }
-    polygon = polygon.map(([x, y]) => [
-      ((x - minX) / (maxX - minX)) * this.areaSize,
-      ((y - minY) / (maxY - minY)) * this.areaSize,
-    ])
+  CONSTANTS_REVERSED = {
+    0: 'edge',
+    1: 'temp_edge',
+    2: 'temp_visited',
+    3: 'inside',
+    4: 'outside',
+  }
+  areaInside = 0
+  polygons = []
+  insert(polygon, inside = 'inside') {
     let evenlySpaced = []
     let spacing = this.cellSize / 5
     let spacingCounter = 0
@@ -140,7 +141,7 @@ class BoundaryCollisionDetector {
       }
     }
     polygon = evenlySpaced
-    this.polygon = polygon
+    this.polygons.push([polygon, inside])
 
     // reversing the direction ensures the normals will point inwards
     let maybeInside
@@ -160,12 +161,13 @@ class BoundaryCollisionDetector {
       this.data[i + 4] = -1
     }
 
-    const cellType = inside ? this.CONSTANTS.INSIDE : this.CONSTANTS.OUTSIDE
+    const cellType =
+      inside === 'inside' ? this.CONSTANTS.INSIDE : this.CONSTANTS.OUTSIDE
 
     for (let i = 0; i < polygon.length; i++) {
       let [x0, y0] = polygon[i]
-      let xi = Math.floor((x0 / this.areaSize) * this.length)
-      let yi = Math.floor((y0 / this.areaSize) * this.length)
+      let xi = Math.floor(x0 * this.length)
+      let yi = Math.floor(y0 * this.length)
       let j = (yi * this.length + xi) * 6
       let x1 = xi / this.length + this.cellSize / 2
       let y1 = yi / this.length + this.cellSize / 2
@@ -191,8 +193,8 @@ class BoundaryCollisionDetector {
     let startingPoint = -1
     for (let i = 0; i < 50; i++) {
       let [x0, y0] = polygon[Math.floor(Math.random() * polygon.length)]
-      let xi = Math.floor((x0 / this.areaSize) * this.length)
-      let yi = Math.floor((y0 / this.areaSize) * this.length)
+      let xi = Math.floor(x0 * this.length)
+      let yi = Math.floor(y0 * this.length)
       let sz = this.cellSize
       let x1 = xi / this.length + sz / 2
       let y1 = yi / this.length + sz / 2
@@ -283,20 +285,16 @@ class BoundaryCollisionDetector {
               this.maxDistance
           )
         )
-        if (x1 < 0 || y1 < 0 || x1 > this.areaSize || y1 > this.areaSize)
-          continue
+        if (x1 < 0 || y1 < 0 || x1 > 1 || y1 > 1) continue
 
-        let xi = Math.floor((x1 / this.areaSize) * this.length)
-        let yi = Math.floor((y1 / this.areaSize) * this.length)
+        let xi = Math.floor(x1 * this.length)
+        let yi = Math.floor(y1 * this.length)
         let j = (yi * this.length + xi) * 6
         let sz = this.cellSize
         x1 = xi / this.length + sz / 2
         y1 = yi / this.length + sz / 2
         let distance = ((x0 - x1) ** 2 + (y0 - y1) ** 2) ** 0.5
         if (this.data[j + 5] !== this.CONSTANTS.EDGE) {
-          let pl = polygon[(i - 1 + polygon.length) % polygon.length]
-          let pr = polygon[(i + 1) % polygon.length]
-          let [nx, ny] = vec.setLength([-(pl[1] - pr[1]), pl[0] - pr[0]], 1)
           this.data[j + 0] = x0
           this.data[j + 1] = y0
           this.data[j + 2] = distance
@@ -318,11 +316,10 @@ class BoundaryCollisionDetector {
       let x1 = xi / this.length + sz / 2
       let y1 = yi / this.length + sz / 2
       let distance = vec.length(vec.sub([x0, y0], [x1, y1]))
-      if (this.data[current * 6 + 3] === -1) this.data[current * 6 + 3] = i
       if (
         (i !== 0 &&
           this.data[current * 6 + 2] !== -1 &&
-          distance + 0.00001 > this.data[current * 6 + 2]) ||
+          distance + 0.000001 > this.data[current * 6 + 2]) ||
         distance > this.maxDistance
       ) {
         return
@@ -330,6 +327,7 @@ class BoundaryCollisionDetector {
       this.data[current * 6 + 0] = this.data[origin * 6 + 0]
       this.data[current * 6 + 1] = this.data[origin * 6 + 1]
       this.data[current * 6 + 2] = distance
+      this.data[current * 6 + 3] = this.data[origin * 6 + 3]
       this.data[current * 6 + 4] = this.data[origin * 6 + 4]
 
       let left = yi * this.length + Math.max(xi - 1, 0)
@@ -354,16 +352,46 @@ class BoundaryCollisionDetector {
       visit([origin, bottomRight, i + 1])
     })
 
-    if (this.finemesh) this.finemesh.addCurve(curve, inside)
+    let areaInside = 0
+    for (let i = 0; i < this.data.length; i += 6) {
+      if (this.data[i + 5] === this.CONSTANTS.INSIDE) areaInside += 1
+      if (this.data[i + 5] === this.CONSTANTS.EDGE) areaInside += 0.5
+    }
+    this.areaInside = areaInside / this.length ** 2
+
+    if (this.finemesh) this.finemesh.insert(polygon, inside)
     return this
   }
-  constructor(isFinemesh = false) {
-    this.areaSize = 1
-    this.cellSize = isFinemesh ? 0.0025 : 0.01
-    this.maxDistance = isFinemesh ? this.areaSize / 20 : this.areaSize / 1.5
+  retrieve(particle, returnNullIfNoCollision = true) {
+    if (this.finemesh) {
+      let f = this.finemesh.retrieve(particle, returnNullIfNoCollision)
+      if (f) return f
+    }
 
-    this.length = Math.ceil(this.areaSize / this.cellSize)
-    // x, y, distance, normal_x, normal_y, cell_type
+    let xi = Math.floor(clamp(particle.position[0], 0, 1) * this.length)
+    let yi = Math.floor(clamp(particle.position[1], 0, 1) * this.length)
+    let j = (yi * this.length + xi) * 6
+    let d = this.data
+    if (d[j + 2] === -1) return null
+    if (
+      returnNullIfNoCollision &&
+      d[j + 5] === this.CONSTANTS.INSIDE &&
+      d[j + 2] > particle.radius
+    ) {
+      return null
+    }
+    return {
+      position: [d[j + 0], d[j + 1]],
+      normal: [d[j + 3], d[j + 4]],
+      status: this.CONSTANTS_REVERSED[d[j + 5]],
+    }
+  }
+  constructor(isFinemesh = false) {
+    this.cellSize = isFinemesh ? 0.0025 : 0.01
+    this.maxDistance = isFinemesh ? 1 / 20 : 1 / 1.5
+
+    this.length = Math.ceil(1 / this.cellSize)
+    // x, y, distance, normal_x, normal_y, status
     this.data = new Float32Array(this.length ** 2 * 6).fill(-1)
     for (let i = 0; i < this.data.length; i += 6) {
       this.data[i + 5] = this.CONSTANTS.OUTSIDE
@@ -374,4 +402,65 @@ class BoundaryCollisionDetector {
   }
 }
 
-export {ParticleCollisionDetector, BoundaryCollisionDetector}
+const BoundaryViz = ({boundaryCollisionDetector, showDecals, ...props}) => {
+  const ref = useRef()
+  const bcd = boundaryCollisionDetector
+
+  const scale = 96
+  const padding = 2
+
+  useEffect(() => {
+    if (!showDecals) return
+    const data = []
+    let bcd = boundaryCollisionDetector
+    for (let i = 0; i < bcd.data.length; i += 6) {
+      let xi = ((i / 6) % bcd.length) / bcd.length + bcd.cellSize / 2
+      let yi = Math.floor(i / 6 / bcd.length) / bcd.length + bcd.cellSize / 2
+      let [x, y, d, nx, ny, status] = bcd.data.slice(i, i + 6)
+      if (d !== -1) {
+        data.push({xi, yi, x, y, d, nx, ny, status})
+      }
+    }
+    let svg = ''
+    data.forEach(({xi, yi, x, y, nx, ny, status}, i) => {
+      svg += `
+        <line
+          x1="${xi * scale + padding}"
+          y1="${yi * scale + padding}"
+          x2="${(x + nx * 0.1) * scale + padding}"
+          y2="${(y + ny * 0.1) * scale + padding}"
+          stroke="lightBlue"
+          stroke-width="${0.02}"
+        />
+      `
+      // svg += `
+      //   <circle
+      //     cx="${(x + nx * 0.1) * scale + padding}"
+      //     cy="${(y + ny * 0.1) * scale + padding}"
+      //     fill="${'lightBlue'}"
+      //     r="${0.2}"
+      //   />
+      // `
+    })
+    ref.current.innerHTML = svg
+  }, [boundaryCollisionDetector])
+
+  return (
+    <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" {...props}>
+      <rect fill="#222" width="100" height="100"></rect>
+      <polygon
+        fill="#000"
+        stroke="#add8e6"
+        strokeWidth={0.1}
+        points={bcd.polygons[0][0]
+          .map(
+            ([x, y]) => +(x * scale + padding) + ',' + +(y * scale + padding)
+          )
+          .join(' ')}
+      />
+      <g ref={ref} />
+    </svg>
+  )
+}
+
+export {ParticleCollisionDetector, BoundaryCollisionDetector, BoundaryViz}
