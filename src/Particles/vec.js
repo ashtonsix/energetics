@@ -38,6 +38,14 @@ const vec = {
   setLength(a, b) {
     return vec.mult(a, b / vec.length(a))
   },
+  $mix(a, b, m) {
+    a[0] = a[0] * (1 - m) + b[0] * m
+    a[1] = a[1] * (1 - m) + b[1] * m
+    return a
+  },
+  mix(a, b, m) {
+    return [a[0] * (1 - m) + b[0] * m, a[1] * (1 - m) + b[1] * m]
+  },
 }
 
 export default vec
