@@ -2,7 +2,8 @@ import {
   circleMaze,
   peach,
   squareMaze,
-  teslaValve,
+  teslaValve0,
+  teslaValve1,
   thermodynamicsBuster0,
   thermodynamicsBuster1,
   thermodynamicsBuster2,
@@ -278,7 +279,10 @@ const mixedShapes = [
     return [[polygon, 'inside']]
   })(),
   (() => {
-    return teslaValve
+    return teslaValve0
+  })(),
+  (() => {
+    return teslaValve1
   })(),
   (() => {
     return circleMaze
