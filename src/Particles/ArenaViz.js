@@ -1,55 +1,69 @@
 import React, {useRef, useEffect} from 'react'
 
-const ArenaViz = ({sim, showDecals, ...props}) => {
+const ArenaViz = ({sim, showDecals = [], finemesh, ...props}) => {
   const ref = useRef()
 
-  const scale = 96
-  const padding = 2
+  const scale = 100
 
   useEffect(() => {
     if (!showDecals) return
     const data = []
     let bcd = sim.boundaryCollisionDetector
+    if (finemesh) bcd = bcd.finemesh
     for (let i = 0; i < bcd.data.length; i += 6) {
       let xi = ((i / 6) % bcd.length) / bcd.length + bcd.cellSize / 2
       let yi = Math.floor(i / 6 / bcd.length) / bcd.length + bcd.cellSize / 2
       let [x, y, d, nx, ny, status] = bcd.data.slice(i, i + 6)
-      if (d !== -1) {
-        data.push({xi, yi, x, y, d, nx, ny, status})
-      }
+      // if (d !== -1) {
+      data.push({xi, yi, x, y, d, nx, ny, status})
+      // }
     }
     let svg = ''
     data.forEach(({xi, yi, x, y, nx, ny, status}, i) => {
-      svg += `
-        <line
-          x1="${xi * scale + padding}"
-          y1="${yi * scale + padding}"
-          x2="${x * scale + padding}"
-          y2="${y * scale + padding}"
-          stroke="lightBlue"
-          stroke-width="${0.02}"
-        />
-      `
-      // svg += `
-      //   <circle
-      //     cx="${xi * scale + padding}"
-      //     cy="${yi * scale + padding}"
-      //     fill="${['white', 'red', 'green', 'blue', 'yellow'][status]}"
-      //     r="${0.2}"
-      //   />
-      // `
+      if (showDecals.includes('status')) {
+        svg += `
+          <circle
+            cx="${xi * scale}"
+            cy="${yi * scale}"
+            fill="${['white', 'red', 'green', 'blue', 'yellow'][status]}"
+            r="${finemesh ? 0.05 : 0.2}"
+          />
+        `
+      }
+      if (showDecals.includes('normals')) {
+        svg += `
+          <line
+            x1="${x * scale}"
+            y1="${y * scale}"
+            x2="${(x + nx * 0.05) * scale}"
+            y2="${(y + ny * 0.05) * scale}"
+            stroke="lightBlue"
+            stroke-width="${finemesh ? 0.005 : 0.02}"
+          />
+        `
+      }
+      if (showDecals.includes('closest')) {
+        svg += `
+          <line
+            x1="${xi * scale}"
+            y1="${yi * scale}"
+            x2="${x * scale}"
+            y2="${y * scale}"
+            stroke="lightBlue"
+            stroke-width="${finemesh ? 0.005 : 0.02}"
+          />
+        `
+      }
     })
     let el = ref.current
     el.innerHTML = svg
     return () => {
       el.innerHTML = ''
     }
-  }, [sim.boundaryCollisionDetector, showDecals])
+  }, [sim.boundaryCollisionDetector, showDecals, finemesh])
 
   let polygons = sim.boundary.map(([polygon, inside]) => [
-    polygon
-      .map(([x, y]) => +(x * scale + padding) + ',' + +(y * scale + padding))
-      .join(' '),
+    polygon.map(([x, y]) => +(x * scale) + ',' + +(y * scale)).join(' '),
     inside === 'inside',
   ])
 
@@ -95,8 +109,8 @@ const ArenaViz = ({sim, showDecals, ...props}) => {
       {!!sim.params.spawnArea && (
         <circle
           fill="#004e10"
-          cx={sim.params.spawnArea.x * scale + padding}
-          cy={sim.params.spawnArea.y * scale + padding}
+          cx={sim.params.spawnArea.x * scale}
+          cy={sim.params.spawnArea.y * scale}
           r={sim.params.spawnArea.radius * scale}
           mask="url(#mask)"
         />
@@ -108,17 +122,17 @@ const ArenaViz = ({sim, showDecals, ...props}) => {
           if ($.rotationSpread === 0) {
             return (
               <line
-                x1={$.x * scale + padding}
-                y1={$.y * scale + padding}
-                x2={($.x + Math.cos($.rotation) * radius) * scale + padding}
-                y2={($.y + Math.sin($.rotation) * radius) * scale + padding}
+                x1={$.x * scale}
+                y1={$.y * scale}
+                x2={($.x + Math.cos($.rotation) * radius) * scale}
+                y2={($.y + Math.sin($.rotation) * radius) * scale}
                 stroke="green"
                 strokeWidth={0.5}
                 mask="url(#mask)"
               />
             )
           }
-          const arc = [[$.x * scale + padding, $.y * scale + padding]]
+          const arc = [[$.x * scale, $.y * scale]]
           for (
             let t = $.rotation - $.rotationSpread;
             t < $.rotation + $.rotationSpread;
@@ -126,7 +140,7 @@ const ArenaViz = ({sim, showDecals, ...props}) => {
           ) {
             const x = Math.cos(t) * radius
             const y = Math.sin(t) * radius
-            arc.push([($.x + x) * scale + padding, ($.y + y) * scale + padding])
+            arc.push([($.x + x) * scale, ($.y + y) * scale])
           }
           return <polygon points={arc} fill="green" mask="url(#mask)" />
         })()}

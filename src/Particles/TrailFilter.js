@@ -8,11 +8,13 @@ varying vec2 vTextureCoord;
 uniform sampler2D uSampler;
 uniform sampler2D uSamplerPrev;
 uniform float uAlpha;
+uniform float uStopAt;
 
 void main(void)
 {
   vec4 color1 = texture2D(uSampler, vTextureCoord);
-  vec4 color2 = texture2D(uSamplerPrev, vTextureCoord) * uAlpha - (1.0 - uAlpha) / 10.0;
+  vec4 color2 = texture2D(uSamplerPrev, vTextureCoord) * uAlpha;
+  if (color2.a <= uStopAt) color2 = vec4(0.0, 0.0, 0.0, 0.0);
   gl_FragColor = color2 * (1.0 - color1.a) + color1;
 }
 `
@@ -25,6 +27,7 @@ export default class TrailFilter extends PIXI.Filter {
 
     this.doNothingFilter = new PIXI.Filter()
     this.uniforms.uAlpha = 0
+    this.uniforms.uStopAt = 0.3
     this.uniforms.uSamplerPrev = null
   }
 
@@ -33,7 +36,11 @@ export default class TrailFilter extends PIXI.Filter {
 
   apply(filterManager, input, output, clear) {
     this.filterManager = filterManager
-    this.uniforms.uAlpha = 0.1 ** (0.2 / this.trailLength)
+    const numSteps = this.trailLength * 4
+    const stopAt = this.uniforms.uStopAt - 0.01
+    // calculate how many steps of x_{i+1} = x_{i} * y are required until x<stopAt, for x_{0} = 1:
+    this.uniforms.uAlpha =
+      this.trailLength >= 1000 ? 1 : (stopAt ** 0.5) ** (2 / numSteps)
     if (!this.isActive()) {
       this.doNothingFilter.apply(
         filterManager,

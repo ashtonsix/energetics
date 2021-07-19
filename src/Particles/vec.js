@@ -46,6 +46,17 @@ const vec = {
   mix(a, b, m) {
     return [a[0] * (1 - m) + b[0] * m, a[1] * (1 - m) + b[1] * m]
   },
+  $clamp(a, min, max) {
+    a[0] = Math.min(Math.max(a[0], min), max)
+    a[1] = Math.min(Math.max(a[1], min), max)
+    return a
+  },
+  clamp(a, min, max) {
+    return [
+      Math.min(Math.max(a[0], min), max),
+      Math.min(Math.max(a[1], min), max),
+    ]
+  },
 }
 
 export default vec

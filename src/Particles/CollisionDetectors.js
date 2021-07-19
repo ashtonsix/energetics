@@ -4,6 +4,10 @@ const clamp = (value, min, max) => {
   return Math.min(Math.max(value, min), max)
 }
 
+const outOfBounds = (x, y) => {
+  return x < 0 || y < 0 || x > 1 || y > 1
+}
+
 class ParticleCollisionDetector {
   cellSize = 0.01
   length = 10
@@ -71,7 +75,8 @@ const evenlySpacePolygon = (polygon, spacing) => {
   loop: for (let i = 0; i < polygon.length; i++) {
     let [x0, y0] = polygon[i % polygon.length]
     let [x1, y1] = polygon[(i + 1) % polygon.length]
-    while (true) {
+    if (isNaN(x0) || isNaN(y0)) throw new Error('Bad polygon')
+    for (let i = 0; i < 15000; i++) {
       let distance = ((x0 - x1) ** 2 + (y0 - y1) ** 2) ** 0.5
       if (spacingCounter + distance < spacing) {
         spacingCounter += distance
@@ -171,10 +176,7 @@ class BoundaryCollisionDetector {
 
     // ensure the arena is fully encased by boundaries
     if (inside === 'inside') {
-      polygon = polygon.map(([x, y]) => [
-        clamp(x, 0, 0.999999),
-        clamp(y, 0, 0.999999),
-      ])
+      polygon = polygon.map(([x, y]) => [clamp(x, 0, 1), clamp(y, 0, 1)])
     }
 
     // smooth the polygon to make spikes and crevices easier to handle
@@ -184,7 +186,7 @@ class BoundaryCollisionDetector {
     // space the polygon vertices evenly so there's a vertex
     // in every grid cell the polygon boundary intersects
     polygon = evenlySpacePolygon(polygon, this.cellSize / 8)
-    this.polygons.push(polygon)
+    this.polygons.push([polygon, inside])
 
     // maybe reverse the polygon direction so the normals will point inwards
     let isInside
@@ -211,6 +213,7 @@ class BoundaryCollisionDetector {
     // mark the new polygon outline on the grid
     for (let i = 0; i < polygon.length; i++) {
       let [x0, y0] = polygon[i]
+      if (outOfBounds(x0, y0)) continue
       let xi = Math.floor(x0 * this.length)
       let yi = Math.floor(y0 * this.length)
       let j = (yi * this.length + xi) * 6
@@ -219,6 +222,13 @@ class BoundaryCollisionDetector {
       let distance = ((x0 - x1) ** 2 + (y0 - y1) ** 2) ** 0.5
       // TEMP_VISITED becomes INSIDE/OUTSIDE later, TEMP_EDGE becomes EDGE
       if (this.data[j + 5] === cellType) {
+        this.data[j + 5] = this.CONSTANTS.TEMP_VISITED
+      } else if (this.data[j + 5] === this.CONSTANTS.EDGE) {
+        this.data[i + 0] = -1
+        this.data[i + 1] = -1
+        this.data[i + 2] = -1
+        this.data[i + 3] = -1
+        this.data[i + 4] = -1
         this.data[j + 5] = this.CONSTANTS.TEMP_VISITED
       } else if (this.data[j + 5] !== this.CONSTANTS.TEMP_VISITED) {
         if (
@@ -242,8 +252,9 @@ class BoundaryCollisionDetector {
 
     // find a random grid cell inside the polygon
     let startingPoint = -1
-    for (let i = 0; i < 50; i++) {
+    for (let i = 0; i < 500; i++) {
       let [x0, y0] = polygon[Math.floor(Math.random() * polygon.length)]
+      if (outOfBounds(x0, y0)) continue
       let xi = Math.floor(x0 * this.length)
       let yi = Math.floor(y0 * this.length)
       let sz = this.cellSize
@@ -336,9 +347,10 @@ class BoundaryCollisionDetector {
     // to boundary points faster and more accurate
     let extra = []
     for (let p = 0; p < this.polygons.length; p++) {
-      let polygon = this.polygons[p]
+      let polygon = this.polygons[p][0]
       for (let i = 0; i < polygon.length; i++) {
         let [x0, y0] = polygon[i]
+        if (outOfBounds(x0, y0)) continue
         let xi = Math.floor(x0 * this.length)
         let yi = Math.floor(y0 * this.length)
         let j = (yi * this.length + xi) * 6
@@ -356,7 +368,7 @@ class BoundaryCollisionDetector {
                 this.maxDistance
             )
           )
-          if (x1 < 0 || y1 < 0 || x1 > 1 || y1 > 1) continue
+          if (outOfBounds(x1, y1)) continue
           let xi = Math.floor(x1 * this.length)
           let yi = Math.floor(y1 * this.length)
           let j = (yi * this.length + xi) * 6
@@ -459,7 +471,7 @@ class BoundaryCollisionDetector {
   }
   constructor(isFinemesh = false) {
     this.cellSize = isFinemesh ? 0.0025 : 0.01
-    this.maxDistance = isFinemesh ? 1 / 20 : 1 / 1.5
+    this.maxDistance = isFinemesh ? 1 / 20 : 1
 
     this.length = Math.ceil(1 / this.cellSize)
     // x, y, distance, normal_x, normal_y, status

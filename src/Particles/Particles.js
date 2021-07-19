@@ -1,5 +1,6 @@
 import * as PIXI from 'pixi.js'
 import React, {useEffect, useRef, useState} from 'react'
+import {useDebouncedCallback} from 'use-debounce'
 import {
   ParticleCollisionDetector,
   BoundaryCollisionDetector,
@@ -9,69 +10,86 @@ import vec from './vec'
 import UserControls from './UserControls'
 import boundaryGenerators from './boundaryGenerators'
 import TrailFilter from './TrailFilter'
+import Explainer from './Explainer'
 
-const collide = (p1, p2, constantVelocity, particleStickiness) => {
-  const radii = p1.radius + p2.radius
-  const normal = vec.sub(p1.position, p2.position)
+const collide = (p0, p1, elasticity, constantVelocity) => {
+  const radii = p0.radius + p1.radius
+  const normal = vec.sub(p0.position, p1.position)
   if (!vec.lengthLessThan(normal, radii)) {
-    return
+    return false
   }
+  const initialMomentum =
+    p0.mass * vec.length(p0.velocity) + p1.mass * vec.length(p1.velocity)
   const pushAway = vec.setLength(normal, (radii - vec.length(normal)) / 2)
-  vec.$add(p1.position, pushAway)
-  vec.$sub(p2.position, pushAway)
+  vec.$add(p0.position, pushAway)
+  vec.$sub(p1.position, pushAway)
 
   const un = vec.$setLength(normal, 1)
   const ut = [-un[1], un[0]]
 
+  let p0vn = vec.dot(un, p0.velocity)
+  let p1vn = vec.dot(un, p1.velocity)
+  let p0v = vec.add(
+    vec.mult(
+      un,
+      (elasticity * p1.mass * (p1vn - p0vn) + p0.mass * p0vn + p1.mass * p1vn) /
+        (p0.mass + p1.mass)
+    ),
+    vec.mult(ut, vec.dot(ut, p0.velocity))
+  )
   let p1v = vec.add(
-    vec.mult(un, vec.dot(un, p2.velocity)),
+    vec.mult(
+      un,
+      (elasticity * p0.mass * (p0vn - p1vn) + p0.mass * p0vn + p1.mass * p1vn) /
+        (p0.mass + p1.mass)
+    ),
     vec.mult(ut, vec.dot(ut, p1.velocity))
   )
-  let p2v = vec.add(
-    vec.mult(un, vec.dot(un, p1.velocity)),
-    vec.mult(ut, vec.dot(ut, p2.velocity))
-  )
-  if (particleStickiness) {
-    const v0 = vec.length(p1v) + vec.length(p2v)
-    const temp = vec.mix(p1v, p2v, particleStickiness)
-    p2v = vec.mix(p2v, p1v, particleStickiness)
-    p1v = temp
-    const v1 = vec.length(p1v) + vec.length(p2v)
-    const ratio = v0 / v1
-    vec.$mult(p1v, ratio)
-    vec.$mult(p2v, ratio)
-  }
+  const currentMomentum = p0.mass * vec.length(p0v) + p1.mass * vec.length(p1v)
+  vec.$mult(p0v, initialMomentum / currentMomentum)
+  vec.$mult(p1v, initialMomentum / currentMomentum)
+
   if (constantVelocity) {
-    const v = (vec.length(p1.velocity) + vec.length(p2.velocity)) / 2
-    vec.$setLength(p1v, v)
-    vec.$setLength(p2v, v)
+    vec.$setLength(p0v, 1)
+    vec.$setLength(p1v, 1)
   }
 
+  p0.velocity = p0v
   p1.velocity = p1v
-  p2.velocity = p2v
+
+  return true
 }
 
-const collideBoundary = (p, boundary, sticky, bcd) => {
+const collideBoundary = (p, boundary, elastic, bcd) => {
   let normal = boundary.normal
   let un = normal
   let ut = [-un[1], un[0]]
 
+  vec.$clamp(p.position, 0.01 + p.radius, 0.99 - p.radius)
   let relativePosition = vec.sub(p.position, boundary.position)
   let pNormalMag = vec.dot(un, relativePosition)
+  let pTangentMag = vec.dot(ut, relativePosition)
 
-  if (pNormalMag > p.radius) return
+  if (Math.abs(pTangentMag) > p.radius + bcd.cellSize * 2) {
+    // handle edge case where arena shape changes and
+    // particle is deep inside boundary
+    vec.$add(p.position, vec.mult(ut, -pTangentMag))
+  }
+  if (pNormalMag > p.radius) return false
 
   vec.$add(p.position, vec.mult(un, p.radius - pNormalMag + 0.000001))
 
-  if (sticky) {
-    const v = Math.sign(vec.dot(ut, p.velocity)) * vec.length(p.velocity)
-    p.velocity = vec.mult(ut, v)
-  } else {
+  if (elastic) {
     let projected = vec.dot(un, p.velocity) * 2
     if (projected < 0) vec.$sub(p.velocity, vec.mult(un, projected))
+  } else {
+    const v =
+      Math.sign(vec.dot(ut, p.velocity) || Math.random() - 0.5) *
+      vec.length(p.velocity)
+    p.velocity = vec.mult(ut, v)
   }
 
-  // improves behaviour of sticky boundaries with crevices
+  // improves behaviour of inelastic boundaries with crevices
   let stillCollides = bcd.retrieve(p)
   if (stillCollides) {
     const relativePosition = vec.sub(p.position, stillCollides.position)
@@ -83,18 +101,12 @@ const collideBoundary = (p, boundary, sticky, bcd) => {
       if (projected < 0) vec.$sub(p.velocity, vec.mult(un, projected))
     }
   }
+
+  return true
 }
 
 const clamp = (value, min, max) => {
   return Math.min(Math.max(+value || 0, min), max)
-}
-
-const debounce = (f, timeout = 300) => {
-  let timer
-  return (...args) => {
-    clearTimeout(timer)
-    timer = setTimeout(() => f.apply(this, args), timeout)
-  }
 }
 
 const shuffle = (array) => {
@@ -118,19 +130,22 @@ class Simulation {
     particleCount: 500,
     particleRadiusMin: 0,
     particleRadiusMax: 0,
-    particleSpeed: 3 / 1000,
-    particleSpeedConstant: false,
+    particleSizeDistribution: 1,
+    simulationSpeed: 3 / 1000,
+    particleVelocityConstant: false,
     particleCollisions: true,
-    particleStickiness: 0,
-    boundaryStickiness: false,
-    boundary: {name: 'circleSquare', params: [1]},
+    particleElasticity: 1,
+    boundaryElasticity: true,
+    boundary: {name: 'circleSquare', params: [1, 1]},
     spawnArea: null, // null OR {x: 0.5, y: 0.5, radius: 0.03, rotation: Math.PI * 0, rotationSpread: Math.PI * 0.15}
     redFraction: 10 / 100,
     trailDisplay: 'disabled', // disabled, enabled, or trailOnly
     trailLength: 20,
+    mass: 'constant',
   }
   constructor() {
     this.updateBoundary(this.params.boundary)
+    this.updateBoundaryCollisionDetector()
     this.params.particleRadiusMin = clamp(
       this.getSuggestedRadius() * 0.6,
       0.002,
@@ -144,6 +159,12 @@ class Simulation {
   }
   particles = []
   boundary = []
+  stats = {
+    step: 0,
+    data: [],
+    dataRetention: 100,
+    histogramBuckets: 20,
+  }
   boundaryCollisionDetector = null
   connector = {
     createSprite(particle) {
@@ -157,13 +178,14 @@ class Simulation {
       return true
     },
   }
+  endCycleHook = {}
   getSuggestedRadius(particleCount = null) {
     if (particleCount === null) particleCount = this.params.particleCount
     const totalArea = this.boundaryCollisionDetector.areaInside * 0.7
     const area = totalArea / particleCount
     return (area / Math.PI) ** 0.5
   }
-  createParticle() {
+  createParticle(averageArea) {
     const $ = this.params
     const particle = {}
     const spawnArea = $.spawnArea || {
@@ -177,12 +199,13 @@ class Simulation {
       spawnArea.rotation -
       spawnArea.rotationSpread +
       Math.random() * spawnArea.rotationSpread * 2
-    particle.velocity = vec.mult(
-      [Math.cos(rotation), Math.sin(rotation)],
-      $.particleSpeed
-    )
+    particle.velocity = [Math.cos(rotation), Math.sin(rotation)]
     let range = $.particleRadiusMax - $.particleRadiusMin
-    particle.radius = $.particleRadiusMin + Math.random() ** 0.5 * range
+    let power =
+      $.particleSizeDistribution < 0
+        ? Math.abs($.particleSizeDistribution) + 1
+        : 1 / (1 + $.particleSizeDistribution)
+    particle.radius = $.particleRadiusMin + Math.random() ** power * range
     particle.red = Math.random() < $.redFraction ? true : false
 
     for (let i = 0; i < 500; i++) {
@@ -192,8 +215,18 @@ class Simulation {
         Math.cos(angle) * distance + spawnArea.x,
         Math.sin(angle) * distance + spawnArea.y,
       ]
+      let [x, y] = particle.position
+      if (
+        x < particle.radius ||
+        x > 1 - particle.radius ||
+        y < particle.radius ||
+        y > 1 - particle.radius
+      ) {
+        continue
+      }
       const collides = this.boundaryCollisionDetector.retrieve(particle)
       if (!collides) break
+      if (collides.status === 'outside') continue
       let normal = collides.normal
       let relativePosition = vec.sub(particle.position, collides.position)
       let pNormalMag = vec.dot(normal, relativePosition)
@@ -201,11 +234,13 @@ class Simulation {
     }
     particle.sprite = this.connector.createSprite(particle)
     this.particles.push(particle)
+    return particle
   }
   destroyParticle(r = null) {
     if (r === null) r = Math.floor(Math.random() * this.particles.length)
     const p = this.particles.splice(r, 1)[0]
     this.connector.destroySprite(p.sprite)
+    return true
   }
   // adds, removes & scales particles to satisfy configured parameters
   normaliseParticles() {
@@ -218,9 +253,37 @@ class Simulation {
         this.destroyParticle(i)
       }
     }
+
     if ($P.length < count) {
-      const toAdd = count - $P.length
-      for (let i = 0; i < toAdd; i++) this.createParticle()
+      // radius is a random value between min/max,
+      // velocity is the value that preserves average momentum,
+      // every added particle is given the same momentum
+      let averageArea = 0
+      for (let i = 0; i < $P.length; i++) {
+        averageArea += $P[i].radius ** 2
+      }
+      averageArea /= $P.length
+
+      let addedParticles = []
+      let toAdd = count - $P.length
+      for (let i = 0; i < toAdd; i++) {
+        addedParticles.push(this.createParticle(averageArea))
+      }
+
+      let averageAreaAdded = 0
+      for (let i = 0; i < addedParticles.length; i++) {
+        averageAreaAdded += addedParticles[i].radius ** 2
+      }
+      averageAreaAdded /= addedParticles.length
+      if (!averageArea) averageArea = averageAreaAdded
+
+      for (let i = 0; i < addedParticles.length; i++) {
+        let area = addedParticles[i].radius ** 2
+        vec.$setLength(
+          addedParticles[i].velocity,
+          $p.mass === 'constant' ? 1 : averageArea / area
+        )
+      }
     }
     if ($P.length > count) {
       const toDestroy = $P.length - count
@@ -228,12 +291,10 @@ class Simulation {
     }
 
     if (!$P.length) return
-    let totalVelocity = 0
 
     let min = $P[0].radius
     let max = $P[0].radius
     for (let i = 0; i < $P.length; i++) {
-      totalVelocity += vec.length($P[i].velocity)
       if ($P[i].radius > max) max = $P[i].radius
       if ($P[i].radius < min) min = $P[i].radius
     }
@@ -245,46 +306,79 @@ class Simulation {
       e
     )
 
-    let avgVelocity = totalVelocity / $P.length
-    let velocityRatio = this.params.particleSpeed / avgVelocity
     for (let i = 0; i < $P.length; i++) {
       const r = ($P[i].radius - min) * (desiredRange / range) + desiredMin
       $P[i].radius = r
-      // velocity is conserved in collisions, but average velocity can
-      // still deviate from parameters due to particles despawning
-      vec.$mult($P[i].velocity, velocityRatio)
+      $P[i].mass = $p.mass === 'constant' ? 1 : r ** 2
+      if ($p.particleVelocityConstant) {
+        vec.$setLength($P[i].velocity, 1)
+      }
+    }
+    if ($p.particleVelocityConstant) return
+
+    // only has an effect when the number of particles is reduced,
+    // or any of these settings are changed:
+    // Particle Mass, Simulation Speed
+    let averageMass = 0
+    let averageMomentum = 0
+    for (let i = 0; i < $P.length; i++) {
+      averageMass += $P[i].mass
+    }
+    averageMass /= $P.length
+    for (let i = 0; i < $P.length; i++) {
+      $P[i].mass /= averageMass
+      averageMomentum += $P[i].mass * vec.length($P[i].velocity)
+    }
+    averageMomentum /= $P.length
+    for (let i = 0; i < $P.length; i++) {
+      vec.$mult($P[i].velocity, 1 / averageMomentum)
     }
   }
   cycle({playing}) {
     this.normaliseParticles()
     if (playing) {
+      // prettier-ignore
+      let s = {
+        particleCollisionCount: 0,
+        boundaryCollisionCount: 0,
+        orientationToBoundary: new Array(this.stats.histogramBuckets).fill(0),
+        orientationOfCollidingParticles: new Array(this.stats.histogramBuckets).fill(0)
+      }
+      this.stats.step += 1
+      const {
+        simulationSpeed,
+        boundaryElasticity,
+        particleCollisions,
+        particleRadiusMax,
+        particleVelocityConstant,
+        particleElasticity,
+      } = this.params
       for (let i = 0; i < this.particles.length; i++) {
         const p = this.particles[i]
-        vec.$add(p.position, p.velocity)
+        vec.$add(p.position, vec.mult(p.velocity, simulationSpeed))
         p.position[0] = Math.min(Math.max(p.position[0], 0), 0.999999)
         p.position[1] = Math.min(Math.max(p.position[1], 0), 0.999999)
         const boundary = this.boundaryCollisionDetector.retrieve(p)
         if (boundary) {
-          collideBoundary(
+          s.boundaryCollisionCount += collideBoundary(
             p,
             boundary,
-            this.params.boundaryStickiness,
+            boundaryElasticity,
             this.boundaryCollisionDetector
           )
         }
       }
 
-      if (this.params.particleCollisions) {
+      let o2p = s.orientationOfCollidingParticles
+      if (particleCollisions) {
         const particleCollisionDetector = new ParticleCollisionDetector(
-          this.params.particleRadiusMax * 2
+          particleRadiusMax * 2
         )
         for (let i = 0; i < this.particles.length; i++) {
           const p = this.particles[i]
           particleCollisionDetector.insert(p)
         }
 
-        const particleSpeedConstant = this.params.particleSpeedConstant
-        const particleStickiness = this.params.particleStickiness
         for (let i = 0; i < this.particles.length; i++) {
           let p = this.particles[i]
 
@@ -293,9 +387,41 @@ class Simulation {
           for (let k = 0; k < candidates.length; k++) {
             let candidate = candidates[k]
             if (p === candidate || !candidate) continue
-            collide(p, candidate, particleSpeedConstant, particleStickiness)
+            let didCollide = collide(
+              p,
+              candidate,
+              particleElasticity,
+              particleVelocityConstant
+            )
+            s.particleCollisionCount += didCollide
+            if (didCollide) {
+              let a0 = p.sprite[0].rotation
+              let a1 = candidate.sprite[0].rotation
+              let diff =
+                (a0 - a1 + Math.PI * (2 + 1 / o2p.length)) % (Math.PI * 2)
+              let j = Math.floor((diff * o2p.length) / (Math.PI * 2))
+              o2p[j] += 1
+            }
           }
         }
+      }
+      let o2b = s.orientationToBoundary
+      for (let i = 0; i < this.particles.length; i++) {
+        const p = this.particles[i]
+        const boundary = this.boundaryCollisionDetector.retrieve(p, false)
+        if (!boundary) continue
+        let pa = Math.atan2(p.velocity[1], p.velocity[0])
+        let ba = Math.atan2(boundary.normal[1], boundary.normal[0])
+        let diff = (pa - ba + Math.PI * (2.5 + 1 / o2b.length)) % (Math.PI * 2)
+        let j = Math.floor((diff * o2b.length) / (Math.PI * 2))
+        o2b[j] += 1
+      }
+      this.stats.data.push(s)
+      if (this.stats.data.length > this.stats.dataRetention) {
+        this.stats.data.shift()
+      }
+      for (const k in this.endCycleHook) {
+        this.endCycleHook[k]()
       }
     }
     for (let i = 0; i < this.particles.length; i++) {
@@ -303,41 +429,21 @@ class Simulation {
       this.connector.updateSprite(p.sprite, p)
     }
   }
-  updateParticleSpeed(newSpeed) {
-    const oldSpeed = this.params.particleSpeed
-    this.params.particleSpeed = newSpeed
-    const ratio = newSpeed / oldSpeed
-    for (let i = 0; i < this.particles.length; i++) {
-      if (this.params.particleSpeedConstant) {
-        vec.$setLength(this.particles[i].velocity, newSpeed)
-      } else {
-        vec.$mult(this.particles[i].velocity, ratio)
-      }
-    }
-  }
-  updateBoundary(boundary, callback = () => {}) {
-    if (!this.boundaryCollisionDetector) {
-      this.updateBCD(boundary, callback)
-      return
-    }
-    if (!this._updateBCD) {
-      this._updateBCD = debounce(this.updateBCD.bind(this), 100)
-    }
-    this._updateBCD(boundary, callback)
-  }
-  updateBCD(boundary, callback = () => {}) {
-    console.log(boundary.name)
+  updateBoundary(boundary) {
     this.params.boundary = boundary
-    this.boundary = boundaryGenerators[boundary.name].generator(
-      boundary.params,
-      1000
-    )
+    this.boundary = boundaryGenerators[boundary.name]
+      .generator(boundary.params, 1000)
+      .map(([polygon, inside]) => [
+        polygon.map((p) => vec.add(vec.mult(p, 0.96), [0.02, 0.02])),
+        inside,
+      ])
+  }
+  updateBoundaryCollisionDetector() {
     this.boundaryCollisionDetector = new BoundaryCollisionDetector()
     this.boundary.forEach(([polygon, inside], i) => {
-      let more = i < boundary.length - 1
+      let more = i < this.boundary.length - 1
       this.boundaryCollisionDetector.insert(polygon, inside, more)
     })
-    callback()
   }
   updateRedFraction(redFraction) {
     let redCount = 0
@@ -362,9 +468,30 @@ class Simulation {
       p.sprite = this.connector.createSprite(p)
     }
   }
+  updateSizeDistribution(newSizeDistribution) {
+    let $ = this.params
+    let oldSizeDistribution = $.particleSizeDistribution
+    $.particleSizeDistribution = newSizeDistribution
+    let range = $.particleRadiusMax - $.particleRadiusMin
+    let oldPower =
+      oldSizeDistribution < 0
+        ? Math.abs(oldSizeDistribution) + 1
+        : 1 / (1 + oldSizeDistribution)
+    let newPower =
+      newSizeDistribution < 0
+        ? Math.abs(newSizeDistribution) + 1
+        : 1 / (1 + newSizeDistribution)
+    for (let i = 0; i < this.particles.length; i++) {
+      let p = this.particles[i]
+      let r = (p.radius - $.particleRadiusMin) / range
+      r = r ** (newPower / oldPower)
+      r = r * range + $.particleRadiusMin
+      p.radius = r
+    }
+  }
 }
 
-const Particles = () => {
+const ParticlesNoExplainer = () => {
   const ref = useRef()
   const [sim] = useState(() => {
     const sim = new Simulation()
@@ -377,10 +504,21 @@ const Particles = () => {
     ticker: null,
     trailFilter: null,
   })
+  const updateBoundaryCollisionDetector = useDebouncedCallback(() => {
+    sim.updateBoundaryCollisionDetector()
+    setNonce(Math.random())
+    state.current.trailFilter.uniforms.uSamplerPrev = null
+    state.current.app.renderer.clear()
+    letTickerGoForASecond()
+  }, 500)
 
   const letTickerGoForASecond = () => {
     if (!state.current.playing && state.current.ticker) {
-      state.current.ticker.start()
+      try {
+        state.current.ticker.start()
+      } catch (e) {
+        return
+      }
       setTimeout(() => {
         if (!state.current.playing) {
           try {
@@ -424,12 +562,11 @@ const Particles = () => {
         particle.red ? '/arrow_red_32.png' : '/arrow_32.png'
       )
       sprite.anchor.set(0.5)
-      const scale = app.screen.width * 0.96
-      const padding = app.screen.width * 0.02
-      sprite.x = particle.position[0] * scale + padding
-      sprite.y = particle.position[1] * scale + padding
-      sprite.width = particle.radius * 2 * scale + padding
-      sprite.height = particle.radius * 2 * scale + padding
+      const scale = app.screen.width
+      sprite.x = particle.position[0] * scale
+      sprite.y = particle.position[1] * scale
+      sprite.width = particle.radius * 2 * scale
+      sprite.height = particle.radius * 2 * scale
       sprite.rotation = Math.atan2(particle.velocity[1], particle.velocity[0])
       ;(particle.red ? spriteContainerRed : spriteContainer).addChild(sprite)
 
@@ -437,8 +574,8 @@ const Particles = () => {
         particle.red ? '/trail_red.png' : '/trail.png'
       )
       trail.anchor.set(0.5)
-      trail.x = particle.position[0] * scale + padding
-      trail.y = particle.position[1] * scale + padding
+      trail.x = particle.position[0] * scale
+      trail.y = particle.position[1] * scale
       trail.width = 2
       trail.height = 2
       ;(particle.red ? trailContainerRed : trailContainer).addChild(trail)
@@ -450,23 +587,22 @@ const Particles = () => {
       return true
     }
     sim.connector.updateSprite = ([sprite, trail], particle) => {
-      const scale = app.screen.width * 0.96
-      const padding = app.screen.width * 0.02
-      sprite.x = particle.position[0] * scale + padding
-      sprite.y = particle.position[1] * scale + padding
+      const scale = app.screen.width
+      sprite.x = particle.position[0] * scale
+      sprite.y = particle.position[1] * scale
       sprite.width = particle.radius * 2 * scale
       sprite.height = particle.radius * 2 * scale
       sprite.rotation = Math.atan2(particle.velocity[1], particle.velocity[0])
       sprite.alpha = sim.params.trailDisplay === 'trailOnly' ? 0 : 1
 
-      trail.x = particle.position[0] * scale + padding
-      trail.y = particle.position[1] * scale + padding
+      trail.x = particle.position[0] * scale
+      trail.y = particle.position[1] * scale
       trail.alpha = sim.params.trailDisplay === 'disabled' ? 0 : 1
       return true
     }
 
     const resizeWindow = () => {
-      const windowSize = Math.min(window.innerWidth, window.innerHeight) - 50
+      const windowSize = Math.min(window.innerWidth, window.innerHeight) - 65
       app.renderer.resize(windowSize, windowSize)
       app.renderer.clear()
       trailFilter.uniforms.uSamplerPrev = null
@@ -480,13 +616,16 @@ const Particles = () => {
 
     const ticker = app.ticker.add(() => {
       trailFilter.trailLength =
-        sim.params.trailDisplay === 'disabled' ? 0 : sim.params.trailLength
+        sim.params.trailDisplay === 'disabled'
+          ? 0
+          : sim.params.trailLength >= 1000
+          ? 1000
+          : sim.params.trailLength / (sim.params.simulationSpeed * 1000)
       sim.cycle(state.current)
     })
     state.current.ticker = ticker
-    setTimeout(() => {
-      if (!state.current.playing) ticker.stop()
-    }, 1000)
+    ticker.stop()
+    letTickerGoForASecond()
 
     let _state = state.current
     return () => {
@@ -505,7 +644,7 @@ const Particles = () => {
           padding: 10,
           marginLeft: -10,
           width: '100%',
-          maxWidth: 'calc(min(100vh, 100vw) - 50px)',
+          maxWidth: 'calc(min(100vh, 100vw) - 65px)',
         }}
       >
         <div style={{position: 'relative', width: '100%', paddingTop: '100%'}}>
@@ -518,7 +657,7 @@ const Particles = () => {
               height: '100%',
             }}
             sim={sim}
-            // showDecals
+            // showDecals={['closest']}
           />
           <div
             ref={ref}
@@ -532,7 +671,7 @@ const Particles = () => {
           ></div>
         </div>
       </div>
-      <div>
+      <div style={{paddingBottom: 10}}>
         <button
           onClick={() => {
             state.current.playing = !state.current.playing
@@ -577,6 +716,16 @@ const Particles = () => {
             state.current.trailFilter.uniforms.uSamplerPrev = null
             state.current.app.renderer.clear()
             sim.params.particleCount = p
+            sim.stats = {
+              step: 0,
+              data: [],
+              dataRetention: 100,
+              histogramBuckets: 20,
+            }
+            // particleCollisionCount: 0,
+            // boundaryCollisionCount: 0,
+            // orientationToBoundary: new Array(20).fill(0),
+            // orientationOfCollidingParticles: new Array(20).fill(0),
             sim.normaliseParticles()
             letTickerGoForASecond()
           }}
@@ -595,16 +744,20 @@ const Particles = () => {
               setNonce(Math.random())
             }
             if (params.boundary !== sim.params.boundary) {
-              sim.updateBoundary(params.boundary, () => {
-                setNonce(Math.random())
-              })
+              sim.updateBoundary(params.boundary)
+              setNonce(Math.random())
+              updateBoundaryCollisionDetector()
             }
             if (params.redFraction !== sim.params.redFraction) {
               sim.updateRedFraction(params.redFraction)
             }
+            if (
+              params.particleSizeDistribution !==
+              sim.params.particleSizeDistribution
+            ) {
+              sim.updateSizeDistribution(params.particleSizeDistribution)
+            }
 
-            sim.params.particleSpeedConstant = params.particleSpeedConstant
-            sim.updateParticleSpeed(params.particleSpeed)
             let {particleRadiusMin, particleRadiusMax} = params
             particleRadiusMax = Math.max(particleRadiusMin, particleRadiusMax)
             sim.params = {
@@ -615,12 +768,22 @@ const Particles = () => {
             letTickerGoForASecond()
           }}
           nonce={nonce}
+          sim={sim}
           defaultValue={sim.params}
           getSuggestedRadius={(particleCount) =>
             sim.getSuggestedRadius(particleCount)
           }
         />
       </div>
+    </div>
+  )
+}
+
+const Particles = () => {
+  return (
+    <div>
+      <ParticlesNoExplainer />
+      <Explainer />
     </div>
   )
 }
