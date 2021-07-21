@@ -41,9 +41,36 @@ class ParticleCollisionDetector {
     )
     return candidates
   }
+  // cellSize should be betweem 100% & 102% of maxParticleDiameter
+  // we only throw away the collider if it's outside those bounds
+  // to reduce memory churn when particle sizes are small
+  //
+  // in practice, this reduces the program's total memory churn by 50%
+  reset(newMaxParticleDiameter) {
+    let tooBig = newMaxParticleDiameter > this.cellSize
+    let tooSmall = newMaxParticleDiameter * 1.021 < this.cellSize
+    let justRight = !tooBig && !tooSmall
+    if (tooBig || tooSmall) {
+      if (tooBig) console.log('too big')
+      if (tooSmall) console.log('too small')
+      this.data = []
+      // heurestic: if particle size increased, it's more likely
+      // to increase than decrease next cycle
+      this.cellSize = newMaxParticleDiameter * (tooBig ? 1.02 : 1.0)
+      this.length = Math.ceil(1 / this.cellSize)
+      for (let i = 0; i < this.length ** 2; i++) {
+        this.data.push([])
+      }
+    } else if (justRight) {
+      console.log('just right')
+      for (let i = 0; i < this.data.length; i++) {
+        if (this.data[i].length) this.data[i] = []
+      }
+    }
+  }
   constructor(maxParticleDiameter) {
-    this.cellSize = maxParticleDiameter
-    this.length = Math.ceil(1 / maxParticleDiameter)
+    this.cellSize = maxParticleDiameter * 1.02
+    this.length = Math.ceil(1 / this.cellSize)
     for (let i = 0; i < this.length ** 2; i++) {
       this.data.push([])
     }
@@ -164,6 +191,7 @@ class BoundaryCollisionDetector {
     4: 'outside',
   }
   areaInside = 0
+  maxDistance = 0
   polygons = []
   insert(
     polygon,
@@ -437,11 +465,19 @@ class BoundaryCollisionDetector {
     })
 
     let areaInside = 0
+    let maxDistance = 0
     for (let i = 0; i < this.data.length; i += 6) {
       if (this.data[i + 5] === this.CONSTANTS.INSIDE) areaInside += 1
       if (this.data[i + 5] === this.CONSTANTS.EDGE) areaInside += 0.5
+      if (
+        this.data[i + 2] > maxDistance &&
+        [this.CONSTANTS.INSIDE, this.CONSTANTS.EDGE].includes(this.data[i + 5])
+      ) {
+        maxDistance = this.data[i + 2]
+      }
     }
     this.areaInside = areaInside / this.length ** 2
+    this.maxDistance = maxDistance
 
     return this
   }
@@ -466,6 +502,7 @@ class BoundaryCollisionDetector {
     return {
       position: [d[j + 0], d[j + 1]],
       normal: [d[j + 3], d[j + 4]],
+      distanceEstimate: d[j + 2],
       status: this.CONSTANTS_REVERSED[d[j + 5]],
     }
   }

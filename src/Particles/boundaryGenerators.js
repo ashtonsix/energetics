@@ -1,5 +1,6 @@
 import {
   circleMaze,
+  domeValve,
   peach,
   squareMaze,
   teslaValve0,
@@ -283,6 +284,9 @@ const mixedShapes = [
   })(),
   (() => {
     return teslaValve1
+  })(),
+  (() => {
+    return domeValve
   })(),
   (() => {
     return circleMaze

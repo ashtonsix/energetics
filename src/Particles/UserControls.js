@@ -11,14 +11,14 @@ const Input = React.forwardRef(
   ) => {
     const handleOnChange = useDebouncedCallback(onChange, debounce)
     return (
-      <label style={{display: 'block', width: 360, padding: '3px 0'}}>
-        {!!label && <span style={{fontSize: 32}}>{label}</span>}
+      <label style={{display: 'block', width: 335, padding: '3px 0'}}>
+        {!!label && <span style={{fontSize: 27}}>{label}</span>}
         {!!label && <br />}
-        {!!note && <span style={{fontSize: 22}}>{note}</span>}
+        {!!note && <span style={{fontSize: 20}}>{note}</span>}
         {!!note && <br />}
         <input
           ref={ref}
-          style={{fontSize: 32, width: 300}}
+          style={{fontSize: 27, width: 270}}
           onChange={(e) => {
             if (onChangeImmediate) onChangeImmediate(e.target.value)
             handleOnChange(e.target.value)
@@ -37,14 +37,14 @@ const Input = React.forwardRef(
 const Select = React.forwardRef(
   ({label, note, onChange, options, ...props}, ref) => {
     return (
-      <label style={{display: 'block', width: 360, padding: '3px 0'}}>
-        <span style={{fontSize: 32}}>{label}</span>
+      <label style={{display: 'block', width: 335, padding: '3px 0'}}>
+        <span style={{fontSize: 27}}>{label}</span>
         <br />
-        {!!note && <span style={{fontSize: 22}}>{note}</span>}
+        {!!note && <span style={{fontSize: 20}}>{note}</span>}
         {!!note && <br />}
         <select
           ref={ref}
-          style={{fontSize: 32, verticalAlign: 'top'}}
+          style={{fontSize: 27, verticalAlign: 'top'}}
           onChange={(e) => onChange(e.target.value)}
           {...props}
         >
@@ -68,6 +68,7 @@ const generateStats = (stats, rollingMeanWindow) => {
   let empty = new Array(stats.histogramBuckets).fill(0)
   let particleCollisionCount = 0
   let boundaryCollisionCount = 0
+  let distanceToBoundary = empty.slice()
   let orientationToBoundary = empty.slice()
   let orientationOfCollidingParticles = empty.slice()
   // prettier-ignore
@@ -75,6 +76,7 @@ const generateStats = (stats, rollingMeanWindow) => {
     particleCollisionCount += data[i].particleCollisionCount / data.length
     boundaryCollisionCount += data[i].boundaryCollisionCount / data.length
     for (let j = 0; j < empty.length; j++) {
+      distanceToBoundary[j] += data[i].distanceToBoundary[j]
       orientationToBoundary[j] += data[i].orientationToBoundary[j]
       orientationOfCollidingParticles[j] += data[i].orientationOfCollidingParticles[j]
     }
@@ -82,11 +84,37 @@ const generateStats = (stats, rollingMeanWindow) => {
 
   // prettier-ignore
   const collisions = +(particleCollisionCount + boundaryCollisionCount).toFixed(0)
+  let d2bMax = Math.max(...distanceToBoundary) || 1
   let o2bMax = Math.max(...orientationToBoundary) || 1
   let o2pMax = Math.max(...orientationOfCollidingParticles) || 1
   return `
     <span>Collisions during last step: ${collisions.toLocaleString()}</span>
     <br />
+    <span>Distance of particles from boundary:</span>
+    <br />
+    <br />
+    <svg
+      viewBox="0 0 100 100"
+      preserveAspectRatio="none"
+      xmlns="http://www.w3.org/2000/svg"
+      style="display: block; width: 300px; height: 80px;"
+    >
+      ${[]
+        .concat(
+          ...distanceToBoundary.map((height, i) => {
+            let h = (height * 95) / d2bMax + 5
+            let w = 100 / distanceToBoundary.length
+            return `<rect
+            x="${i * w}"
+            y="${100 - h}"
+            height="${h}"
+            width="${w}"
+            fill="grey"
+          />`
+          })
+        )
+        .join('')}
+    </svg>
     <span>Orientation of particles relative to boundary:</span>
     <br />
     <br />
@@ -308,11 +336,11 @@ const UserControls = ({
           params.current.particleRadiusMax ||
           params.current._particleSizeDistributionTouched) && (
           <>
-            <span style={{fontSize: 22}}>Distribution</span>
+            <span style={{fontSize: 20}}>Distribution</span>
             <br />
             <input
               type="range"
-              style={{display: 'block', width: 300}}
+              style={{display: 'block', width: 270}}
               min={-5}
               max={5}
               step={1}
@@ -393,68 +421,74 @@ const UserControls = ({
           {value: 'false', label: 'Disabled'},
         ]}
       />
-      <div>
-        <Select
-          label="Particle Elasticity (%)"
-          key="particleElasticity.select"
-          defaultValue={
-            params.current.particleElasticity === 1
-              ? 'elastic'
-              : params.current.particleElasticity < 1
-              ? 'inelastic'
-              : 'superelastic'
-          }
-          onChange={(value) => {
-            let $p = params.current
-            let currentValue =
-              $p.particleElasticity === 1
-                ? 'elastic'
-                : $p.particleElasticity < 1
-                ? 'inelastic'
-                : 'superelastic'
-            if (value === currentValue) return
-            if (value === 'inelastic') $p.particleElasticity = 0.75
-            if (value === 'elastic') $p.particleElasticity = 1
-            if (value === 'superelastic') $p.particleElasticity = 1.25
-            inputs.current.particleElasticityInput.value = (
-              $p.particleElasticity * 100
-            ).toFixed(2)
-            submitChange()
-          }}
-          options={[
-            {value: 'inelastic', label: 'Inelastic'},
-            {value: 'elastic', label: 'Elastic'},
-            {value: 'superelastic', label: 'Superelastic'},
-          ]}
-          ref={(input) => (inputs.current.particleElasticitySelect = input)}
-        />
-        <Input
-          debounce={500}
-          key="particleElasticity.input"
-          defaultValue={(params.current.particleElasticity * 100).toFixed(2)}
-          onChangeImmediate={(value) => {
-            value = clamp(value, 0, 200) / 100
-            inputs.current.particleElasticitySelect.value =
-              value === 1 ? 'elastic' : value < 1 ? 'inelastic' : 'superelastic'
-          }}
-          onChange={(value) => {
-            params.current.particleElasticity = clamp(value, 0, 200) / 100
-            inputs.current.particleElasticitySelect.value =
+      {params.current.particleCollisions && (
+        <div>
+          <Select
+            label="Particle Elasticity (%)"
+            key="particleElasticity.select"
+            defaultValue={
               params.current.particleElasticity === 1
                 ? 'elastic'
                 : params.current.particleElasticity < 1
                 ? 'inelastic'
                 : 'superelastic'
-            submitChange()
-          }}
-          onBlur={(e) => {
-            e.target.value = (params.current.particleElasticity * 100).toFixed(
-              2
-            )
-          }}
-          ref={(input) => (inputs.current.particleElasticityInput = input)}
-        />
-      </div>
+            }
+            onChange={(value) => {
+              let $p = params.current
+              let currentValue =
+                $p.particleElasticity === 1
+                  ? 'elastic'
+                  : $p.particleElasticity < 1
+                  ? 'inelastic'
+                  : 'superelastic'
+              if (value === currentValue) return
+              if (value === 'inelastic') $p.particleElasticity = 0.9
+              if (value === 'elastic') $p.particleElasticity = 1
+              if (value === 'superelastic') $p.particleElasticity = 1.1
+              inputs.current.particleElasticityInput.value = (
+                $p.particleElasticity * 100
+              ).toFixed(2)
+              submitChange()
+            }}
+            options={[
+              {value: 'inelastic', label: 'Inelastic'},
+              {value: 'elastic', label: 'Elastic'},
+              {value: 'superelastic', label: 'Superelastic'},
+            ]}
+            ref={(input) => (inputs.current.particleElasticitySelect = input)}
+          />
+          <Input
+            debounce={500}
+            key="particleElasticity.input"
+            defaultValue={(params.current.particleElasticity * 100).toFixed(2)}
+            onChangeImmediate={(value) => {
+              value = clamp(value, 0, 200) / 100
+              inputs.current.particleElasticitySelect.value =
+                value === 1
+                  ? 'elastic'
+                  : value < 1
+                  ? 'inelastic'
+                  : 'superelastic'
+            }}
+            onChange={(value) => {
+              params.current.particleElasticity = clamp(value, 0, 200) / 100
+              inputs.current.particleElasticitySelect.value =
+                params.current.particleElasticity === 1
+                  ? 'elastic'
+                  : params.current.particleElasticity < 1
+                  ? 'inelastic'
+                  : 'superelastic'
+              submitChange()
+            }}
+            onBlur={(e) => {
+              e.target.value = (
+                params.current.particleElasticity * 100
+              ).toFixed(2)
+            }}
+            ref={(input) => (inputs.current.particleElasticityInput = input)}
+          />
+        </div>
+      )}
       <Select
         label="Boundary Elasticity"
         key="boundaryElasticity"
@@ -507,7 +541,7 @@ const UserControls = ({
             <input
               key={params.current.boundary.name + '.' + i}
               type="range"
-              style={{display: 'block', width: 300}}
+              style={{display: 'block', width: 270}}
               min={min}
               max={max}
               step={step}
@@ -577,7 +611,7 @@ const UserControls = ({
           <div>
             <input
               type="range"
-              style={{display: 'block', width: 300}}
+              style={{display: 'block', width: 270}}
               min={0}
               max={1}
               step={0.02}
@@ -592,7 +626,7 @@ const UserControls = ({
             />
             <input
               type="range"
-              style={{display: 'block', width: 300}}
+              style={{display: 'block', width: 270}}
               min={0}
               max={1}
               step={0.02}
@@ -607,7 +641,7 @@ const UserControls = ({
             />
             <input
               type="range"
-              style={{display: 'block', width: 300}}
+              style={{display: 'block', width: 270}}
               min={0.02}
               max={0.8}
               step={0.02}
@@ -622,7 +656,7 @@ const UserControls = ({
             />
             <input
               type="range"
-              style={{display: 'block', width: 300}}
+              style={{display: 'block', width: 270}}
               min={0}
               max={Math.PI * 2 + 0.000001}
               step={Math.PI / 20}
@@ -637,7 +671,7 @@ const UserControls = ({
             />
             <input
               type="range"
-              style={{display: 'block', width: 300}}
+              style={{display: 'block', width: 270}}
               min={0}
               max={Math.PI + 0.000001}
               step={Math.PI / 40}
@@ -709,14 +743,14 @@ const UserControls = ({
         )}
       </div>
       <div>
-        <span style={{fontSize: 32}}>Actions</span>
+        <span style={{fontSize: 27}}>Actions</span>
         <br />
         <button
           onClick={() => {
             sim.particles.forEach((p) => vec.$mult(p.velocity, -1))
             submitChange()
           }}
-          style={{fontSize: '1.5rem'}}
+          style={{fontSize: 21}}
         >
           Reverse All Velocities
         </button>
@@ -732,13 +766,13 @@ const UserControls = ({
             })
             submitChange()
           }}
-          style={{fontSize: '1.5rem'}}
+          style={{fontSize: 21}}
         >
           Randomise All Velocities
         </button>
       </div>
-      <div style={{maxWidth: 360}}>
-        <span style={{fontSize: 32}}>Stats</span>
+      <div style={{maxWidth: 340}}>
+        <span style={{fontSize: 27}}>Stats</span>
         {playing && (
           <button
             onClick={() => {
@@ -773,13 +807,11 @@ const UserControls = ({
             onChange={(e) => {
               let value = +clamp(e.target.value, 1, 100).toFixed(0)
               params.current._rollingMeanWindow = value
-              if (params.current._statsPlaying) {
-                stepCounter.current.innerHTML = sim.stats.step.toLocaleString()
-                stats.current.innerHTML = generateStats(
-                  sim.stats,
-                  params.current._rollingMeanWindow
-                )
-              }
+              stepCounter.current.innerHTML = sim.stats.step.toLocaleString()
+              stats.current.innerHTML = generateStats(
+                sim.stats,
+                params.current._rollingMeanWindow
+              )
             }}
             onBlur={(e) => {
               e.target.value = params.current._rollingMeanWindow.toFixed(0)

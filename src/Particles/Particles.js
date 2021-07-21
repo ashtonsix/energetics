@@ -134,7 +134,7 @@ class Simulation {
     simulationSpeed: 3 / 1000,
     particleVelocityConstant: false,
     particleCollisions: true,
-    particleElasticity: 1,
+    particleElasticity: 0.95,
     boundaryElasticity: true,
     boundary: {name: 'circleSquare', params: [1, 1]},
     spawnArea: null, // null OR {x: 0.5, y: 0.5, radius: 0.03, rotation: Math.PI * 0, rotationSpread: Math.PI * 0.15}
@@ -147,14 +147,17 @@ class Simulation {
     this.updateBoundary(this.params.boundary)
     this.updateBoundaryCollisionDetector()
     this.params.particleRadiusMin = clamp(
-      this.getSuggestedRadius() * 0.6,
+      this.getSuggestedRadius() * 0.65,
       0.002,
       0.2
     )
     this.params.particleRadiusMax = clamp(
-      this.getSuggestedRadius() * 0.7,
+      this.getSuggestedRadius() * 0.75,
       0.002,
       0.2
+    )
+    this.particleCollisionDetector = new ParticleCollisionDetector(
+      this.params.particleRadiusMax * 2
     )
   }
   particles = []
@@ -163,7 +166,7 @@ class Simulation {
     step: 0,
     data: [],
     dataRetention: 100,
-    histogramBuckets: 20,
+    histogramBuckets: 40,
   }
   boundaryCollisionDetector = null
   connector = {
@@ -341,6 +344,7 @@ class Simulation {
       let s = {
         particleCollisionCount: 0,
         boundaryCollisionCount: 0,
+        distanceToBoundary: new Array(this.stats.histogramBuckets).fill(0),
         orientationToBoundary: new Array(this.stats.histogramBuckets).fill(0),
         orientationOfCollidingParticles: new Array(this.stats.histogramBuckets).fill(0)
       }
@@ -371,9 +375,8 @@ class Simulation {
 
       let o2p = s.orientationOfCollidingParticles
       if (particleCollisions) {
-        const particleCollisionDetector = new ParticleCollisionDetector(
-          particleRadiusMax * 2
-        )
+        const particleCollisionDetector = this.particleCollisionDetector
+        particleCollisionDetector.reset(particleRadiusMax * 2)
         for (let i = 0; i < this.particles.length; i++) {
           const p = this.particles[i]
           particleCollisionDetector.insert(p)
@@ -405,6 +408,8 @@ class Simulation {
           }
         }
       }
+      let maxDistance = this.boundaryCollisionDetector.maxDistance
+      let d2b = s.distanceToBoundary
       let o2b = s.orientationToBoundary
       for (let i = 0; i < this.particles.length; i++) {
         const p = this.particles[i]
@@ -415,6 +420,10 @@ class Simulation {
         let diff = (pa - ba + Math.PI * (2.5 + 1 / o2b.length)) % (Math.PI * 2)
         let j = Math.floor((diff * o2b.length) / (Math.PI * 2))
         o2b[j] += 1
+        let distance =
+          (boundary.distanceEstimate - p.radius) / (maxDistance - p.radius)
+        let k = Math.min(Math.floor(distance * d2b.length), d2b.length - 1)
+        d2b[k] += 1
       }
       this.stats.data.push(s)
       if (this.stats.data.length > this.stats.dataRetention) {
