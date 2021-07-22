@@ -51,8 +51,6 @@ class ParticleCollisionDetector {
     let tooSmall = newMaxParticleDiameter * 1.021 < this.cellSize
     let justRight = !tooBig && !tooSmall
     if (tooBig || tooSmall) {
-      if (tooBig) console.log('too big')
-      if (tooSmall) console.log('too small')
       this.data = []
       // heurestic: if particle size increased, it's more likely
       // to increase than decrease next cycle
@@ -62,7 +60,6 @@ class ParticleCollisionDetector {
         this.data.push([])
       }
     } else if (justRight) {
-      console.log('just right')
       for (let i = 0; i < this.data.length; i++) {
         if (this.data[i].length) this.data[i] = []
       }

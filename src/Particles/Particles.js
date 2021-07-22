@@ -134,7 +134,7 @@ class Simulation {
     simulationSpeed: 3 / 1000,
     particleVelocityConstant: false,
     particleCollisions: true,
-    particleElasticity: 0.95,
+    particleElasticity: 0.9,
     boundaryElasticity: true,
     boundary: {name: 'circleSquare', params: [1, 1]},
     spawnArea: null, // null OR {x: 0.5, y: 0.5, radius: 0.03, rotation: Math.PI * 0, rotationSpread: Math.PI * 0.15}
@@ -319,9 +319,8 @@ class Simulation {
     }
     if ($p.particleVelocityConstant) return
 
-    // only has an effect when the number of particles is reduced,
-    // or any of these settings are changed:
-    // Particle Mass, Simulation Speed
+    // velocity only changed when the number of particles is
+    // reduced or 'Particle Mass' setting is changed
     let averageMass = 0
     let averageMomentum = 0
     for (let i = 0; i < $P.length; i++) {
@@ -422,16 +421,16 @@ class Simulation {
         o2b[j] += 1
         let distance =
           (boundary.distanceEstimate - p.radius) / (maxDistance - p.radius)
-        let k = Math.min(Math.floor(distance * d2b.length), d2b.length - 1)
+        let k = clamp(Math.floor(distance * d2b.length), 0, d2b.length - 1)
         d2b[k] += 1
       }
       this.stats.data.push(s)
       if (this.stats.data.length > this.stats.dataRetention) {
         this.stats.data.shift()
       }
-      for (const k in this.endCycleHook) {
-        this.endCycleHook[k]()
-      }
+    }
+    for (const k in this.endCycleHook) {
+      this.endCycleHook[k]({playing})
     }
     for (let i = 0; i < this.particles.length; i++) {
       const p = this.particles[i]
@@ -524,6 +523,7 @@ const ParticlesNoExplainer = () => {
   const letTickerGoForASecond = () => {
     if (!state.current.playing && state.current.ticker) {
       try {
+        state.current.ticker.update()
         state.current.ticker.start()
       } catch (e) {
         return
@@ -728,15 +728,17 @@ const ParticlesNoExplainer = () => {
             sim.stats = {
               step: 0,
               data: [],
-              dataRetention: 100,
-              histogramBuckets: 20,
+              dataRetention: sim.stats.dataRetention,
+              histogramBuckets: sim.stats.histogramBuckets,
             }
-            // particleCollisionCount: 0,
-            // boundaryCollisionCount: 0,
-            // orientationToBoundary: new Array(20).fill(0),
-            // orientationOfCollidingParticles: new Array(20).fill(0),
             sim.normaliseParticles()
             letTickerGoForASecond()
+            for (const k in sim.endCycleHook) {
+              sim.endCycleHook[k]({
+                playing: state.current.playing,
+                triggeredByReset: true,
+              })
+            }
           }}
           style={{
             fontSize: '2rem',

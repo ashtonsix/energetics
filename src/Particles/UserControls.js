@@ -1,7 +1,8 @@
 import {useDebouncedCallback} from 'use-debounce'
-import React, {useEffect, useRef, useState} from 'react'
+import React, {useRef, useState} from 'react'
 import useInterval from '../useInterval'
 import boundaryGenerators from './boundaryGenerators'
+import Stats from './Stats'
 import vec from './vec'
 
 const Input = React.forwardRef(
@@ -63,112 +64,6 @@ const clamp = (value, min, max) => {
   return Math.min(Math.max(+value || 0, min), max)
 }
 
-const generateStats = (stats, rollingMeanWindow) => {
-  let data = stats.data.slice(-rollingMeanWindow)
-  let empty = new Array(stats.histogramBuckets).fill(0)
-  let particleCollisionCount = 0
-  let boundaryCollisionCount = 0
-  let distanceToBoundary = empty.slice()
-  let orientationToBoundary = empty.slice()
-  let orientationOfCollidingParticles = empty.slice()
-  // prettier-ignore
-  for (let i = 0; i < data.length; i++) {
-    particleCollisionCount += data[i].particleCollisionCount / data.length
-    boundaryCollisionCount += data[i].boundaryCollisionCount / data.length
-    for (let j = 0; j < empty.length; j++) {
-      distanceToBoundary[j] += data[i].distanceToBoundary[j]
-      orientationToBoundary[j] += data[i].orientationToBoundary[j]
-      orientationOfCollidingParticles[j] += data[i].orientationOfCollidingParticles[j]
-    }
-  }
-
-  // prettier-ignore
-  const collisions = +(particleCollisionCount + boundaryCollisionCount).toFixed(0)
-  let d2bMax = Math.max(...distanceToBoundary) || 1
-  let o2bMax = Math.max(...orientationToBoundary) || 1
-  let o2pMax = Math.max(...orientationOfCollidingParticles) || 1
-  return `
-    <span>Collisions during last step: ${collisions.toLocaleString()}</span>
-    <br />
-    <span>Distance of particles from boundary:</span>
-    <br />
-    <br />
-    <svg
-      viewBox="0 0 100 100"
-      preserveAspectRatio="none"
-      xmlns="http://www.w3.org/2000/svg"
-      style="display: block; width: 300px; height: 80px;"
-    >
-      ${[]
-        .concat(
-          ...distanceToBoundary.map((height, i) => {
-            let h = (height * 95) / d2bMax + 5
-            let w = 100 / distanceToBoundary.length
-            return `<rect
-            x="${i * w}"
-            y="${100 - h}"
-            height="${h}"
-            width="${w}"
-            fill="grey"
-          />`
-          })
-        )
-        .join('')}
-    </svg>
-    <span>Orientation of particles relative to boundary:</span>
-    <br />
-    <br />
-    <svg
-      viewBox="0 0 100 100"
-      preserveAspectRatio="none"
-      xmlns="http://www.w3.org/2000/svg"
-      style="display: block; width: 300px; height: 80px;"
-    >
-      ${[]
-        .concat(
-          ...orientationToBoundary.map((height, i) => {
-            let h = (height * 95) / o2bMax + 5
-            let w = 100 / orientationToBoundary.length
-            return `<rect
-            x="${i * w}"
-            y="${100 - h}"
-            height="${h}"
-            width="${w}"
-            fill="grey"
-          />`
-          })
-        )
-        .join('')}
-    </svg>
-    <br />
-    <span>Relative orientation of colliding particles:</span>
-    <br />
-    <br />
-    <svg
-      viewBox="0 0 100 100"
-      preserveAspectRatio="none"
-      xmlns="http://www.w3.org/2000/svg"
-      style="display: block; width: 300px; height: 80px;"
-    >
-      ${[]
-        .concat(
-          ...orientationOfCollidingParticles.map((height, i) => {
-            let h = (height * 95) / o2pMax + 5
-            let w = 100 / orientationOfCollidingParticles.length
-            return `<rect
-            x="${i * w}"
-            y="${100 - h}"
-            height="${h}"
-            width="${w}"
-            fill="grey"
-          />`
-          })
-        )
-        .join('')}
-    </svg>
-  `
-}
-
 const UserControls = ({
   playing,
   onChange,
@@ -193,8 +88,6 @@ const UserControls = ({
     _boundary: {},
     _particleSizeDistributionTouched: false,
     spawnAdjustsRadius: true,
-    _statsPlaying: true,
-    _rollingMeanWindow: 1,
   })
   const inputs = useRef({
     particleCount: {},
@@ -203,28 +96,8 @@ const UserControls = ({
     mass: {},
     particleVelocityConstant: {},
   })
-  const [initialStats] = useState(
-    generateStats(sim.stats, params.current._rollingMeanWindow)
-  )
-  const stats = useRef(null)
-  const stepCounter = useRef(null)
   const scale = 1000
   const suggestedRadius = getSuggestedRadius(params.current.particleCount)
-
-  useEffect(() => {
-    sim.endCycleHook.UserControls = () => {
-      if (params.current._statsPlaying) {
-        stepCounter.current.innerHTML = sim.stats.step.toLocaleString()
-        stats.current.innerHTML = generateStats(
-          sim.stats,
-          params.current._rollingMeanWindow
-        )
-      }
-    }
-    return () => {
-      delete sim.endCycleHook.UserControls
-    }
-  }, [sim.endCycleHook, sim.stats])
 
   useInterval(() => {
     const $p = params.current
@@ -643,7 +516,7 @@ const UserControls = ({
               type="range"
               style={{display: 'block', width: 270}}
               min={0.02}
-              max={0.8}
+              max={0.5}
               step={0.02}
               key="spawnArea.radius"
               defaultValue={params.current.spawnArea?.radius}
@@ -771,55 +644,7 @@ const UserControls = ({
           Randomise All Velocities
         </button>
       </div>
-      <div style={{maxWidth: 340}}>
-        <span style={{fontSize: 27}}>Stats</span>
-        {playing && (
-          <button
-            onClick={() => {
-              params.current._statsPlaying = !params.current._statsPlaying
-              setNonce(Math.random())
-            }}
-            style={{
-              fontSize: '1.5rem',
-              background: 'none',
-              border: 'none',
-              outline: 'none',
-              verticalAlign: 'middle',
-              lineHeight: '1.5',
-              position: 'absolute',
-            }}
-          >
-            {params.current._statsPlaying ? '⏸' : '▶️'}
-          </button>
-        )}
-        <div>
-          Step:{' '}
-          <span
-            ref={stepCounter}
-            dangerouslySetInnerHTML={{__html: '0'}}
-          ></span>
-        </div>
-        <div>
-          Rolling mean window:{' '}
-          <input
-            defaultValue={params.current._rollingMeanWindow.toFixed(0)}
-            style={{width: 40}}
-            onChange={(e) => {
-              let value = +clamp(e.target.value, 1, 100).toFixed(0)
-              params.current._rollingMeanWindow = value
-              stepCounter.current.innerHTML = sim.stats.step.toLocaleString()
-              stats.current.innerHTML = generateStats(
-                sim.stats,
-                params.current._rollingMeanWindow
-              )
-            }}
-            onBlur={(e) => {
-              e.target.value = params.current._rollingMeanWindow.toFixed(0)
-            }}
-          ></input>
-        </div>
-        <div ref={stats} dangerouslySetInnerHTML={{__html: initialStats}}></div>
-      </div>
+      <Stats sim={sim} />
     </div>
   )
 }

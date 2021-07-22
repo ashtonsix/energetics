@@ -124,8 +124,10 @@ const ArenaViz = ({sim, showDecals = [], finemesh, ...props}) => {
               <line
                 x1={$.x * scale}
                 y1={$.y * scale}
-                x2={($.x + Math.cos($.rotation) * radius) * scale}
-                y2={($.y + Math.sin($.rotation) * radius) * scale}
+                // +0.001 is a workaround for Chrome display bug
+                // that occurs when $.rotation === 0
+                x2={($.x + Math.cos($.rotation + 0.001) * radius) * scale}
+                y2={($.y + Math.sin($.rotation + 0.001) * radius) * scale}
                 stroke="green"
                 strokeWidth={0.5}
                 mask="url(#mask)"
