@@ -420,7 +420,8 @@ class Simulation {
         let j = Math.floor((diff * o2b.length) / (Math.PI * 2))
         o2b[j] += 1
         let distance =
-          (boundary.distanceEstimate - p.radius) / (maxDistance - p.radius)
+          (boundary.distanceEstimate - p.radius * 0.75) /
+          (maxDistance - p.radius * 0.75)
         let k = clamp(Math.floor(distance * d2b.length), 0, d2b.length - 1)
         d2b[k] += 1
       }
