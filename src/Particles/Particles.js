@@ -83,9 +83,7 @@ const collideBoundary = (p, boundary, elastic, bcd) => {
     let projected = vec.dot(un, p.velocity) * 2
     if (projected < 0) vec.$sub(p.velocity, vec.mult(un, projected))
   } else {
-    const v =
-      Math.sign(vec.dot(ut, p.velocity) || Math.random() - 0.5) *
-      vec.length(p.velocity)
+    const v = Math.sign(vec.dot(ut, p.velocity) || 1) * vec.length(p.velocity)
     p.velocity = vec.mult(ut, v)
   }
 
@@ -319,8 +317,6 @@ class Simulation {
     }
     if ($p.particleVelocityConstant) return
 
-    // velocity only changed when the number of particles is
-    // reduced or 'Particle Mass' setting is changed
     let averageMass = 0
     let averageMomentum = 0
     for (let i = 0; i < $P.length; i++) {
