@@ -7,6 +7,6 @@ evolution
 
 
 
-more boundaries
-stats - similarity to closest particle (orientation)
-stats - similarity to closest boundary (orientation)
+possible staring points for 3d graph viz:
+https://github.com/anvaka/ngraph.pixel
+https://github.com/vasturiano/three-fatline

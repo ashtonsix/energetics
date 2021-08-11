@@ -584,7 +584,9 @@ const UserControls = ({
               : 'Particle Trail'
           }
           note={
-            params.current.trailLength >= 1000 && 'The trail will never fade'
+            params.current.trailDisplay !== 'disabled' &&
+            params.current.trailLength >= 1000 &&
+            'The trail will never fade'
           }
           key="trailDisplay"
           defaultValue={params.current.trailDisplay}
@@ -644,6 +646,26 @@ const UserControls = ({
           Randomise All Velocities
         </button>
       </div>
+      {!playing && (
+        <Select
+          label="Visualisation"
+          key="visualisation"
+          defaultValue={params.current.visualisation}
+          onChange={(value) => {
+            params.current.visualisation = value
+            submitChange()
+          }}
+          options={[
+            {value: 'particles', label: 'Particles'},
+            {value: 'delaunay', label: 'Delaunay Triangulation'},
+            {value: 'mstEuclidean', label: 'Nearby Particle Tree (A)'},
+            {value: 'mstBits', label: 'Nearby Particle Tree (B)'},
+            {value: 'boundaryStatus', label: 'Boundary (in / out)'},
+            {value: 'boundaryNormal', label: 'Boundary (normals)'},
+            {value: 'boundaryClosest', label: 'Boundary (closest point)'},
+          ]}
+        />
+      )}
       <Stats sim={sim} />
     </div>
   )

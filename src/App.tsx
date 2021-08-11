@@ -1,11 +1,12 @@
 import React from 'react'
 import SimpleDiffusion from './SimpleDiffusion/SimpleDiffusion'
-import Particles from './Particles/Particles'
+import Particles, {ParticlesExplainer} from './Particles/Particles'
 import VectorField from './VectorField/VectorField'
 
 const pages = {
   '/simple-diffusion': SimpleDiffusion,
   '/particles': Particles,
+  '/particles-explainer': ParticlesExplainer,
   '/vector-field': VectorField,
   '/graph': () => null,
 }

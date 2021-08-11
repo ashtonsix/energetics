@@ -11,3 +11,22 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+.stats-table {
+  width: 100%;
+  text-align: center;
+  table-layout: fixed;
+  font-size: 0.8em;
+  border-collapse: collapse;
+  display: block;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+.stats-table tbody {
+  display: table;
+  width: calc(100% - 1px);
+}
+.stats-table td {
+  border: 1px solid #ccc;
+  padding: 1px;
+}
