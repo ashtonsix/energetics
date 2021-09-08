@@ -5,11 +5,53 @@ import Simulation from './Simulation'
 import ArenaViz from './ArenaViz'
 import UserControls from './UserControls'
 import TrailFilter from './TrailFilter'
-import {Explainer, ExplainerIntro} from './Explainer'
-import useMathjax from './useMathjax'
+import ExplainerIntro from './Explainer/ExplainerIntro'
 import AnalysisDisplayTable from './analysis/AnalysisDisplayTable'
+import {
+  statsBreakdown,
+  statsBreakdownMini,
+  analyseCollisions,
+} from './analysis/analysis'
+import csv from './csv'
+export {default as ParticlesExplainer} from './Explainer/Explainer'
+export {default as ParticlesExplainerMechanicsDetailed} from './Explainer/ExplainerMechanicsDetailed'
 
-const ParticlesNoExplainer = () => {
+// slow mode is for recording videos
+const createTicker = (tick) => {
+  let async = false
+  let timeout
+  let playing = false
+  const f = () => {
+    if (!playing) return
+    let p = tick()
+    if (async) {
+      timeout = setTimeout(async () => {
+        await p
+        f()
+      }, 1000 / 60)
+    } else {
+      requestAnimationFrame(f)
+    }
+  }
+  const ticker = {
+    start() {
+      if (!playing) {
+        playing = true
+        f()
+      }
+    },
+    stop() {
+      clearTimeout(timeout)
+      playing = false
+    },
+    setAsync(a) {
+      async = a
+    },
+  }
+  return ticker
+}
+
+const Particles = () => {
   const ref = useRef()
   const [sim] = useState(() => {
     // React calls this function twice when the component mounts, which
@@ -22,8 +64,9 @@ const ParticlesNoExplainer = () => {
   useEffect(() => {
     return () => delete window.sim
   }, [])
-  const [visualisation, setVisualisation] = useState('particles')
+  const [visualisation, setVisualisation] = useState({name: 'particles'})
   const [nonce, setNonce] = useState(0)
+  const [analyses, setAnalyses] = useState([])
   const state = useRef({
     playing: false,
     app: null,
@@ -33,32 +76,23 @@ const ParticlesNoExplainer = () => {
   const updateBoundaryCollisionDetector = useDebouncedCallback(() => {
     sim.updateBoundaryCollisionDetector()
     setNonce(Math.random())
-    state.current.trailFilter.uniforms.uSamplerPrev = null
-    state.current.app.renderer.clear()
-    letTickerGoForASecond()
+    sim.connector.clearDrawing()
+    sim.cycle({playing: false})
   }, 500)
-  useMathjax()
-
-  const letTickerGoForASecond = () => {
-    if (!state.current.playing && state.current.ticker) {
-      try {
-        state.current.ticker.update()
-        state.current.ticker.start()
-      } catch (e) {
-        return
-      }
-      setTimeout(() => {
-        if (!state.current.playing) {
-          try {
-            state.current.ticker.stop()
-          } catch (e) {}
-        }
-      }, 1000)
+  const makeSureVisualisationIsNotObscured = (vis) => {
+    let view = state.current.app?.view
+    let playing = state.current.playing
+    let shouldShowParticles = playing || vis.name === 'particles'
+    if (view) {
+      view.style.opacity = shouldShowParticles ? 1 : 0
     }
   }
 
   useEffect(() => {
-    const app = new PIXI.Application({backgroundAlpha: 0})
+    const app = new PIXI.Application({
+      backgroundAlpha: 0,
+      preserveDrawingBuffer: true,
+    })
     state.current.app = app
     ref.current.appendChild(app.view)
     const options = {
@@ -68,6 +102,9 @@ const ParticlesNoExplainer = () => {
       uvs: true,
       alpha: true,
     }
+    PIXI.Ticker.shared.autoStart = false
+    PIXI.Ticker.shared.stop()
+
     const spriteContainer = new PIXI.ParticleContainer(20000, options)
     const spriteContainerRed = new PIXI.ParticleContainer(20000, options)
 
@@ -85,9 +122,9 @@ const ParticlesNoExplainer = () => {
     app.stage.addChild(trailContainerParent)
     app.stage.addChild(spriteContainer)
     app.stage.addChild(spriteContainerRed)
-    sim.connector.createSprite = (particle) => {
+    sim.connector.onParticleAdded = (particle) => {
       const sprite = PIXI.Sprite.from(
-        particle.red ? '/arrow_red_32.png' : '/arrow_32.png'
+        particle.tracer ? '/arrow_red_32.png' : '/arrow_32.png'
       )
       sprite.anchor.set(0.5)
       const scale = app.screen.width
@@ -96,25 +133,27 @@ const ParticlesNoExplainer = () => {
       sprite.width = particle.radius * 2 * scale
       sprite.height = particle.radius * 2 * scale
       sprite.rotation = Math.atan2(particle.velocity[1], particle.velocity[0])
-      ;(particle.red ? spriteContainerRed : spriteContainer).addChild(sprite)
+      ;(particle.tracer ? spriteContainerRed : spriteContainer).addChild(sprite)
 
       const trail = PIXI.Sprite.from(
-        particle.red ? '/trail_red.png' : '/trail.png'
+        particle.tracer ? '/trail_red.png' : '/trail.png'
       )
       trail.anchor.set(0.5)
       trail.x = particle.position[0] * scale
       trail.y = particle.position[1] * scale
       trail.width = 2
       trail.height = 2
-      ;(particle.red ? trailContainerRed : trailContainer).addChild(trail)
-      return [sprite, trail]
+      ;(particle.tracer ? trailContainerRed : trailContainer).addChild(trail)
+      particle.sprite = [sprite, trail]
     }
-    sim.connector.destroySprite = ([sprite, trail]) => {
+    sim.connector.onParticleRemoved = (particle) => {
+      let [sprite, trail] = particle.sprite
       sprite.destroy()
       trail.destroy()
       return true
     }
-    sim.connector.updateSprite = ([sprite, trail], particle) => {
+    const updateSprite = (particle) => {
+      let [sprite, trail] = particle.sprite
       const scale = app.screen.width
       sprite.x = particle.position[0] * scale
       sprite.y = particle.position[1] * scale
@@ -125,38 +164,166 @@ const ParticlesNoExplainer = () => {
 
       trail.x = particle.position[0] * scale
       trail.y = particle.position[1] * scale
-      trail.alpha = sim.params.trailDisplay === 'disabled' ? 0 : 1
+      trail.alpha =
+        sim.params.trailDisplay === 'disabled'
+          ? 0
+          : !sim.params.trailForTracersOnly || particle.tracer
+          ? 1
+          : 0
       return true
     }
     sim.connector.readRotationFast = (particle) => {
       return particle.sprite?.[0].rotation
     }
-
-    const resizeWindow = () => {
-      const windowSize = Math.min(window.innerWidth, window.innerHeight) - 65
-      app.renderer.resize(windowSize, windowSize)
-      app.renderer.clear()
-      trailFilter.uniforms.uSamplerPrev = null
-      sim.particles.forEach((particle) => {
-        sim.connector.updateSprite(particle.sprite, particle)
-      })
-      letTickerGoForASecond()
-    }
-    resizeWindow()
-    window.addEventListener('resize', resizeWindow)
-
-    const ticker = app.ticker.add(() => {
+    sim.connector.draw = async () => {
+      sim.particles.forEach((particle) => updateSprite(particle))
+      PIXI.Ticker.shared.update(performance.now())
       trailFilter.trailLength =
         sim.params.trailDisplay === 'disabled'
           ? 0
           : sim.params.trailLength >= 1000
           ? 1000
           : sim.params.trailLength / (sim.params.simulationSpeed * 1000)
-      sim.cycle(state.current)
+      app.renderer.render(app.stage)
+
+      if (!sim.recording) return
+      let {
+        stats: {step},
+        recording,
+        params,
+        particles,
+      } = sim
+      console.log(step)
+      let directory = recording.options.directory
+      particles = particles.slice()
+      params = JSON.parse(JSON.stringify(params))
+      if (recording.options.includeVideo) {
+        await new Promise((resolve) => {
+          state.current.app.view.toBlob(
+            async (blob) => {
+              let fileHandle = await directory.getFileHandle(
+                'frame_' + step + '.jpeg',
+                {create: true}
+              )
+              const writeHandle = await fileHandle.createWritable()
+              await writeHandle.write(blob)
+              await writeHandle.close()
+              resolve()
+            },
+            'image/jpeg',
+            0.92
+          )
+        })
+      }
+      if (recording.options.includeState) {
+        let filecontent = ''
+        filecontent += csv.serialise(
+          [params],
+          [
+            'particleCount',
+            'particleRadiusMin',
+            'particleRadiusMax',
+            'particleSizeDistribution',
+            'mass',
+            'particleVelocityConstant',
+            'simulationSpeed',
+            'particleCollisions',
+            'particleElasticity',
+            'boundaryElasticity',
+            'boundary.name',
+            'boundary.params',
+            'spawnRate',
+            'spawnAdjustsRadius',
+            'spawnArea.x',
+            'spawnArea.y',
+            'spawnArea.radius',
+            'spawnArea.rotation',
+            'spawnArea.rotationSpread',
+          ]
+        )
+        filecontent += '\n'
+        filecontent += csv.serialise(particles, [
+          'uid',
+          'position.0',
+          'position.1',
+          'velocity.0',
+          'velocity.1',
+          'radius',
+        ])
+        let fileHandle = await directory.getFileHandle(
+          'state_' + step + '.csv',
+          {create: true}
+        )
+        const writeHandle = await fileHandle.createWritable()
+        await writeHandle.write(filecontent)
+        await writeHandle.close()
+      }
+      if (recording.options.includeCollisions) {
+        let fileHandle = await directory.getFileHandle(
+          'collisions_' + step + '.csv',
+          {create: true}
+        )
+        const writeHandle = await fileHandle.createWritable()
+        await writeHandle.write(
+          csv.serialise(recording.collisions, [
+            'particle0.uid',
+            'particle0.position.0',
+            'particle0.position.1',
+            'particle0.velocity.0',
+            'particle0.velocity.1',
+            'particle0.radius',
+            'particle1.uid',
+            'particle1.position.0',
+            'particle1.position.1',
+            'particle1.velocity.0',
+            'particle1.velocity.1',
+            'particle1.radius',
+            'boundary0.normal.0',
+            'boundary0.normal.1',
+            'boundary0.position.0',
+            'boundary0.position.1',
+            'boundary1.normal.0',
+            'boundary1.normal.1',
+            'boundary1.position.0',
+            'boundary1.position.1',
+          ])
+        )
+        await writeHandle.close()
+      }
+      if (recording.options.includeAnalysis) {
+        let stats = statsBreakdownMini(sim.particles)
+        let fileHandle = await directory.getFileHandle(
+          'analysis_' + step + '.csv',
+          {create: true}
+        )
+        const writeHandle = await fileHandle.createWritable()
+        await writeHandle.write(
+          csv.serialise(stats, ['attribute', 'stat', 'value'])
+        )
+        await writeHandle.close()
+      }
+      console.log(step)
+    }
+    sim.connector.clearDrawing = () => {
+      app.renderer.clear()
+      trailFilter.uniforms.uSamplerPrev = null
+    }
+
+    const resizeWindow = () => {
+      if (sim.recording?.options?.videoResolution) return
+      const windowSize = Math.min(window.innerWidth, window.innerHeight) - 65
+      app.renderer.resize(windowSize, windowSize)
+      sim.connector.clearDrawing()
+      sim.connector.draw()
+    }
+    resizeWindow()
+    window.addEventListener('resize', resizeWindow)
+
+    const ticker = createTicker(() => {
+      return sim.cycle(state.current)
     })
     state.current.ticker = ticker
-    ticker.stop()
-    letTickerGoForASecond()
+    sim.cycle({playing: false})
 
     let _state = state.current
     return () => {
@@ -169,23 +336,20 @@ const ParticlesNoExplainer = () => {
   }, [sim])
 
   useEffect(() => {
-    try {
-      let style = state.current.app?.view.style
-      style.opacity =
-        state.current.playing || visualisation === 'particles' ? 1 : 0
-    } catch (e) {
-      console.error(e)
-    }
+    makeSureVisualisationIsNotObscured(visualisation)
   }, [visualisation])
 
-  return (
+  let Particles = (
     <div style={{display: 'flex', flexWrap: 'wrap'}}>
       <div
         style={{
           padding: 10,
           marginLeft: -10,
-          width: '100%',
-          maxWidth: 'calc(min(100vh, 100vw) - 65px)',
+          width: sim.recording?.options?.videoResolution || '100%',
+          maxWidth:
+            sim.recording?.options?.videoResolution ||
+            'calc(min(100vh, 100vw) - 65px)',
+          flexShrink: sim.recording?.options?.videoResolution ? 0 : 'initial',
         }}
       >
         <div style={{position: 'relative', width: '100%', paddingTop: '100%'}}>
@@ -198,7 +362,7 @@ const ParticlesNoExplainer = () => {
               height: '100%',
             }}
             sim={sim}
-            showDecal={state.current.playing ? 'particles' : visualisation}
+            visualisation={state.current.playing ? 'particles' : visualisation}
           />
           <div
             ref={ref}
@@ -217,15 +381,12 @@ const ParticlesNoExplainer = () => {
           onClick={() => {
             state.current.playing = !state.current.playing
             setNonce(Math.random())
-            let style = state.current.app?.view.style
-            style.opacity =
-              state.current.playing || visualisation === 'particles' ? 1 : 0
+            makeSureVisualisationIsNotObscured(visualisation)
             if (state.current.playing) {
               state.current.ticker.start()
             } else {
-              setTimeout(() => {
-                if (!state.current.playing) state.current.ticker.stop()
-              }, 1000)
+              state.current.ticker.stop()
+              sim.cycle({playing: false})
             }
           }}
           style={{
@@ -242,9 +403,9 @@ const ParticlesNoExplainer = () => {
           onClick={() => {
             if (state.current.playing) return
             state.current.playing = true
-            sim.cycle({...state.current, playing: true})
+            sim.cycle({...state.current})
             state.current.playing = false
-            letTickerGoForASecond()
+            sim.cycle({playing: false})
           }}
           style={{
             fontSize: '2rem',
@@ -257,21 +418,14 @@ const ParticlesNoExplainer = () => {
             const p = sim.params.particleCount
             sim.params.particleCount = 0
             sim.normaliseParticles()
-            state.current.trailFilter.uniforms.uSamplerPrev = null
-            state.current.app.renderer.clear()
             sim.params.particleCount = p
-            sim.stats = {
-              step: 0,
-              data: [],
-              dataRetention: sim.stats.dataRetention,
-              histogramBuckets: sim.stats.histogramBuckets,
-            }
+            sim.resetStats()
             sim.normaliseParticles()
-            letTickerGoForASecond()
-            for (const k in sim.endCycleHook) {
-              sim.endCycleHook[k]({
+            sim.cycle({playing: false})
+            for (const k in sim.updateHook) {
+              sim.updateHook[k]({
                 playing: state.current.playing,
-                triggeredByReset: true,
+                trigger: 'reset',
               })
             }
           }}
@@ -282,12 +436,69 @@ const ParticlesNoExplainer = () => {
         >
           Reset
         </button>
+        <button
+          onClick={() => {
+            csv.upload().then(([{data: filecontent}]) => {
+              let collisions = csv.parse(filecontent)
+              collisions = collisions.filter((c) => c.particle1.uid)
+              collisions = collisions.map((c) => [c.particle0, c.particle1])
+              analyseCollisions(collisions, {
+                elasticity: 1,
+                constantMass: false,
+                constantVelocity: false,
+              })
+            })
+          }}
+          style={{
+            fontSize: '2rem',
+            marginLeft: 10,
+          }}
+        >
+          Analyse Collisions
+        </button>
         <br />
         <UserControls
           playing={state.current.playing}
+          onAnalyseCurrentState={() => {
+            let name = 'state (' + (analyses.length + 1) + ')'
+            return statsBreakdown(sim.particles, name, true).then((s) => {
+              csv.download(
+                csv.serialise(s, ['method', 'attribute', 'stat', 'value']),
+                'analysis.csv'
+              )
+              setAnalyses(analyses.concat([s]))
+            })
+          }}
+          onMakeRecordingStart={(options) => {
+            sim.recording = {options}
+            state.current.ticker.setAsync(true)
+            if (options.includeCollisions) {
+              sim.recording.collisions = []
+            }
+            if (options.videoResolution) {
+              state.current.app.renderer.resize(
+                options.videoResolution,
+                options.videoResolution
+              )
+              sim.connector.clearDrawing()
+              sim.connector.draw()
+              setNonce(Math.random())
+            }
+          }}
+          onMakeRecordingStop={() => {
+            sim.recording = null
+            state.current.ticker.setAsync(false)
+            const windowSize =
+              Math.min(window.innerWidth, window.innerHeight) - 65
+            state.current.app.renderer.resize(windowSize, windowSize)
+            sim.connector.clearDrawing()
+            sim.connector.draw()
+            setNonce(Math.random())
+          }}
           onChange={(params) => {
             if (params.visualisation !== visualisation) {
               setVisualisation(params.visualisation)
+              makeSureVisualisationIsNotObscured(params.visualisation)
             }
             if (params.spawnArea !== sim.params.spawnArea) {
               setNonce(Math.random())
@@ -297,8 +508,8 @@ const ParticlesNoExplainer = () => {
               setNonce(Math.random())
               updateBoundaryCollisionDetector()
             }
-            if (params.redFraction !== sim.params.redFraction) {
-              sim.updateRedFraction(params.redFraction)
+            if (params.tracerFraction !== sim.params.tracerFraction) {
+              sim.updateTracerFraction(params.tracerFraction)
             }
             if (
               params.particleSizeDistribution !==
@@ -314,7 +525,7 @@ const ParticlesNoExplainer = () => {
               ...params,
               particleRadiusMax,
             }
-            letTickerGoForASecond()
+            sim.cycle({playing: false})
           }}
           nonce={nonce}
           sim={sim}
@@ -326,64 +537,35 @@ const ParticlesNoExplainer = () => {
       </div>
     </div>
   )
-}
 
-const writeToDirectory = async () => {
-  let dirHandle = window.dirHandle
-  if (!dirHandle) dirHandle = await window.showDirectoryPicker()
-  window.dirHandle = dirHandle
-
-  let fileHandle1 = window.fileHandle1
-  if (!fileHandle1) {
-    fileHandle1 = await dirHandle.getFileHandle('collisions.csv', {
-      create: true,
-    })
-  }
-  window.fileHandle1 = fileHandle1
-  const writeHandle1 = await fileHandle1.createWritable()
-  await writeHandle1.write('test')
-  await writeHandle1.close()
-
-  setTimeout(async () => {
-    const fileHandle2 = await dirHandle.getFileHandle('particles.csv', {
-      create: true,
-    })
-    const writeHandle2 = await fileHandle2.createWritable()
-    await writeHandle2.write('test')
-    await writeHandle2.close()
-  }, 5000)
-}
-
-export const Particles = () => {
   return (
     <div>
-      <ParticlesNoExplainer />
+      {Particles}
       <div
         style={{
           maxWidth: 'calc(max(min(100vh, 100vw) - 65px, 500px))',
           fontSize: '18px',
         }}
       >
-        <h2 style={{marginTop: 0}}>What is this?</h2>
+        {!!analyses.length && <h2 style={{marginTop: 0}}>Analyses</h2>}
+        {!!analyses.length && (
+          <p>
+            These analyses measure disorder, based on how dissimilar the
+            particles are from each other (lower value = less disorderd). For
+            more details, see <a href="/particles-text">/particles-text</a>
+          </p>
+        )}
+        {!!analyses.length && (
+          <AnalysisDisplayTable statsFromProps={[].concat(...analyses)} />
+        )}
+        <h2 style={analyses.length ? {} : {marginTop: 0}}>What is this?</h2>
         <ExplainerIntro />
         <p>
-          Read more at <a href="/particles-explainer">/particles-explainer</a>
+          Read more at <a href="/particles-text">/particles-text</a>
         </p>
-        <button
-          onClick={() => {
-            writeToDirectory()
-          }}
-        >
-          Save file
-        </button>
-        <AnalysisDisplayTable />
       </div>
     </div>
   )
-}
-
-export const ParticlesExplainer = () => {
-  return <Explainer />
 }
 
 export default Particles

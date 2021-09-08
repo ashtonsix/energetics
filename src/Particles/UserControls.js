@@ -4,6 +4,7 @@ import useInterval from '../useInterval'
 import boundaryGenerators from './boundaryGenerators'
 import Stats from './Stats'
 import vec from './vec'
+import csv from './csv'
 
 const Input = React.forwardRef(
   (
@@ -39,8 +40,8 @@ const Select = React.forwardRef(
   ({label, note, onChange, options, ...props}, ref) => {
     return (
       <label style={{display: 'block', width: 335, padding: '3px 0'}}>
-        <span style={{fontSize: 27}}>{label}</span>
-        <br />
+        {!!label && <span style={{fontSize: 27}}>{label}</span>}
+        {!!label && <br />}
         {!!note && <span style={{fontSize: 20}}>{note}</span>}
         {!!note && <br />}
         <select
@@ -67,6 +68,9 @@ const clamp = (value, min, max) => {
 const UserControls = ({
   playing,
   onChange,
+  onAnalyseCurrentState,
+  onMakeRecordingStart,
+  onMakeRecordingStop,
   defaultValue,
   getSuggestedRadius,
   sim,
@@ -75,6 +79,7 @@ const UserControls = ({
     getSuggestedRadius(defaultValue.particleCount)
   )
   const [, setNonce] = useState(0)
+  const [superNonce, setSuperNonce] = useState(0)
   const params = useRef({
     ...defaultValue,
     spawnRate: 0,
@@ -87,7 +92,14 @@ const UserControls = ({
     },
     _boundary: {},
     _particleSizeDistributionTouched: false,
+    _uploadStateMessage: null,
     spawnAdjustsRadius: true,
+    visualisation: defaultValue.visualisation || {
+      name: 'particles',
+      particlesMetric: 'totalBits',
+      particlesColorIntensity: 3,
+      boundaryFeature: 'status',
+    },
   })
   const inputs = useRef({
     particleCount: {},
@@ -141,6 +153,7 @@ const UserControls = ({
 
   return (
     <div
+      key={superNonce}
       style={{
         display: 'flex',
         flexDirection: 'column',
@@ -273,7 +286,7 @@ const UserControls = ({
         key="simulationSpeed"
         defaultValue={(params.current.simulationSpeed * scale).toFixed(2)}
         onChange={(value) => {
-          params.current.simulationSpeed = clamp(value, 0.1, 10) / scale
+          params.current.simulationSpeed = clamp(value, 0.01, 10) / scale
           submitChange()
         }}
         onBlur={(e) => {
@@ -427,6 +440,8 @@ const UserControls = ({
                 boundary.params = [...boundary.params]
                 boundary.params[i] = +e.target.value
                 params.current.boundary = boundary
+                params.current._boundary[params.current.boundary.name] =
+                  params.current.boundary.params
                 submitChange()
               }}
             />
@@ -494,6 +509,7 @@ const UserControls = ({
                 const $p = params.current
                 if (!$p.spawnArea) return
                 $p.spawnArea = {...$p.spawnArea, x: +e.target.value}
+                $p._spawnArea = $p.spawnArea
                 submitChange()
               }}
             />
@@ -509,6 +525,7 @@ const UserControls = ({
                 const $p = params.current
                 if (!$p.spawnArea) return
                 $p.spawnArea = {...$p.spawnArea, y: +e.target.value}
+                $p._spawnArea = $p.spawnArea
                 submitChange()
               }}
             />
@@ -524,6 +541,7 @@ const UserControls = ({
                 const $p = params.current
                 if (!$p.spawnArea) return
                 $p.spawnArea = {...$p.spawnArea, radius: +e.target.value}
+                $p._spawnArea = $p.spawnArea
                 submitChange()
               }}
             />
@@ -539,6 +557,7 @@ const UserControls = ({
                 const $p = params.current
                 if (!$p.spawnArea) return
                 $p.spawnArea = {...$p.spawnArea, rotation: +e.target.value}
+                $p._spawnArea = $p.spawnArea
                 submitChange()
               }}
             />
@@ -557,6 +576,7 @@ const UserControls = ({
                   ...$p.spawnArea,
                   rotationSpread: +e.target.value,
                 }
+                $p._spawnArea = $p.spawnArea
                 submitChange()
               }}
             />
@@ -566,28 +586,19 @@ const UserControls = ({
       <Input
         label="Tracer Particles (%)"
         debounce={500}
-        key="redFraction"
-        defaultValue={(params.current.redFraction * 100).toFixed(2)}
+        key="tracerFraction"
+        defaultValue={(params.current.tracerFraction * 100).toFixed(2)}
         onChange={(value) => {
-          params.current.redFraction = clamp(value, 0, 100) / 100
+          params.current.tracerFraction = clamp(value, 0, 100) / 100
           submitChange()
         }}
         onBlur={(e) => {
-          e.target.value = (params.current.redFraction * 100).toFixed(2)
+          e.target.value = (params.current.tracerFraction * 100).toFixed(2)
         }}
       />
       <div>
         <Select
-          label={
-            params.current.trailDisplay !== 'disabled'
-              ? 'Particle Trail (length)'
-              : 'Particle Trail'
-          }
-          note={
-            params.current.trailDisplay !== 'disabled' &&
-            params.current.trailLength >= 1000 &&
-            'The trail will never fade'
-          }
+          label={'Particle Trail'}
           key="trailDisplay"
           defaultValue={params.current.trailDisplay}
           onChange={(value) => {
@@ -604,6 +615,12 @@ const UserControls = ({
         {params.current.trailDisplay !== 'disabled' && (
           <Input
             debounce={500}
+            note={
+              <>
+                Length
+                {params.current.trailLength >= 1000 && ' (will never fade)'}
+              </>
+            }
             key="trailLength"
             defaultValue={params.current.trailLength.toFixed(2)}
             onChange={(value) => {
@@ -614,6 +631,21 @@ const UserControls = ({
             onBlur={(e) => {
               e.target.value = params.current.trailLength.toFixed(2)
             }}
+          />
+        )}
+        {params.current.trailDisplay !== 'disabled' && (
+          <Select
+            note="For tracers only"
+            key="trailForTracersOnly"
+            defaultValue={params.current.trailForTracersOnly ? 'true' : 'false'}
+            onChange={(value) => {
+              params.current.trailForTracersOnly = JSON.parse(value)
+              submitChange()
+            }}
+            options={[
+              {value: 'true', label: 'Enabled'},
+              {value: 'false', label: 'Disabled'},
+            ]}
           />
         )}
       </div>
@@ -627,7 +659,7 @@ const UserControls = ({
           }}
           style={{fontSize: 21}}
         >
-          Reverse All Velocities
+          🔁 Reverse All Velocities
         </button>
         <span style={{display: 'block', paddingTop: '5px'}} />
         <button
@@ -643,28 +675,347 @@ const UserControls = ({
           }}
           style={{fontSize: 21}}
         >
-          Randomise All Velocities
+          🔀 Randomise All Velocities
         </button>
+        <span style={{display: 'block', paddingTop: '5px'}} />
+        <button
+          onClick={() => {
+            csv.upload().then(([{filename, data}]) => {
+              try {
+                data = data.split('\n').filter((line) => line !== '')
+                let newParams = csv.parse(data.slice(0, 2))[0]
+                if (typeof newParams.particleRadiusMin !== 'number') {
+                  throw new Error('Missing Parameter')
+                }
+                if (!newParams.spawnArea.radius) {
+                  newParams.spawnArea = null
+                }
+                newParams.visualisation = {
+                  ...params.current.visualisation,
+                  name: 'particles',
+                }
+                let newParticles = csv.parse(data.slice(2))
+                newParams.tracerFraction =
+                  newParticles.reduce((pv, p) => pv + p.tracer, 0) /
+                    newParticles.length || 0
+
+                sim.params.particleCount = 0
+                sim.normaliseParticles()
+                newParticles.forEach((p) => {
+                  sim.connector.onParticleAdded(p)
+                  sim.particles.push(p)
+                })
+                Object.assign(params.current, newParams)
+                submitChange()
+                sim.resetStats()
+                sim.updateBoundary(sim.params.boundary)
+                sim.updateBoundaryCollisionDetector()
+                sim.cycle({playing: false})
+                params.current._uploadStateMessage = null
+                setSuperNonce(Math.random())
+              } catch (e) {
+                console.error(e)
+                let shouldGiveAdvice =
+                  !filename.endsWith('csv') || !filename.includes('state')
+                params.current._uploadStateMessage = (
+                  <div style={{fontSize: '20px'}}>
+                    That didn't work! 😬
+                    {shouldGiveAdvice && <br />}
+                    {shouldGiveAdvice && 'Try it with state.csv'}
+                  </div>
+                )
+                setNonce(Math.random())
+              }
+            })
+          }}
+          style={{fontSize: 21}}
+        >
+          ⬆ Upload Current State
+        </button>
+        {!!params.current._uploadStateMessage && (
+          <span style={{display: 'block', paddingTop: '5px'}} />
+        )}
+        {params.current._uploadStateMessage}
+        <span style={{display: 'block', paddingTop: '5px'}} />
+        <button
+          onClick={() => {
+            let filecontent = ''
+            filecontent += csv.serialise(
+              [params.current],
+              [
+                'softwareVersion',
+                'particleCount',
+                'particleRadiusMin',
+                'particleRadiusMax',
+                'particleSizeDistribution',
+                'mass',
+                'particleVelocityConstant',
+                'simulationSpeed',
+                'particleCollisions',
+                'particleElasticity',
+                'boundaryElasticity',
+                'boundary.name',
+                'boundary.params',
+                'spawnRate',
+                'spawnAdjustsRadius',
+                'spawnArea.x',
+                'spawnArea.y',
+                'spawnArea.radius',
+                'spawnArea.rotation',
+                'spawnArea.rotationSpread',
+              ]
+            )
+            filecontent += '\n\n'
+            filecontent += csv.serialise(sim.particles, [
+              'uid',
+              'position.0',
+              'position.1',
+              'velocity.0',
+              'velocity.1',
+              'radius',
+              'tracer',
+            ])
+            csv.download(filecontent, 'state.csv')
+          }}
+          style={{fontSize: 21}}
+        >
+          ⬇ Download Current State
+        </button>
+        <span style={{display: 'block', paddingTop: '5px'}} />
+        <button
+          onClick={() => {
+            params.current._analysisMessage = (
+              <div style={{fontSize: '20px'}}>Analysing...</div>
+            )
+            setNonce(Math.random())
+            // make the analysis take at least 2 seconds, so it is perceived as in-depth / sophisticated
+            setTimeout(() => {
+              onAnalyseCurrentState().then(() => {
+                params.current._analysisMessage = (
+                  <div style={{fontSize: '20px'}}>
+                    Done! Scroll down for table
+                  </div>
+                )
+                setNonce(Math.random())
+              })
+            }, 2000)
+          }}
+          style={{fontSize: 21}}
+        >
+          🤔 Analyse Current State
+        </button>
+        {!!params.current._analysisMessage && (
+          <span style={{display: 'block', paddingTop: '5px'}} />
+        )}
+        {params.current._analysisMessage}
+        <span style={{display: 'block', paddingTop: '5px'}} />
+        <button
+          onClick={() => {
+            if (params.current._recording) {
+              params.current._recording = false
+              params.current._recordingMessage = (
+                <div style={{fontSize: '20px'}}>Done!</div>
+              )
+              onMakeRecordingStop()
+              setNonce(Math.random())
+              return
+            }
+            params.current._recordingMessage = null
+            setNonce(Math.random())
+            let background = document.createElement('div')
+            background.style =
+              'position: fixed; background: #000; opacity: 0.5; inset: 0;'
+            document.body.appendChild(background)
+            let resolution = 1080
+            let modal = document.createElement('div')
+            modal.style =
+              'position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);' +
+              'background: #fff; border: 1px solid #ccc; min-width: 100px; min-height: 100px; padding: 15px;'
+            modal.innerHTML =
+              `<span id="modal-close-1" style="position: absolute; top: 10px; right: 10px; text-decoration: underline; cursor: pointer;">Cancel</span>` +
+              `<h2 style="margin-top: 15px;">Make Video Recording</h4>` +
+              `<p>This records all the data generated by the simulation, this can use a lot of diskspace ` +
+              `(up to 20 GB per minute). To handle this amount of data we split the data across multiple files, so ` +
+              `you will need to select an empty folder for us to place everything in.</p>` +
+              `<p>This uses non-standard web browser technology (the ` +
+              `<a target="_blank" rel="noopener" href="https://developer.mozilla.org/en-US/docs/Web/API/File_System_Access_API">File System Access API</a>` +
+              `) so may not work for you. If it doesn't, you could try switching to one of ` +
+              `<a target="_blank" rel="noopener" href="https://caniuse.com/mdn-api_filesystemwritablefilestream_write">these supported web browsers</a>` +
+              `, or alternatively, get this project's source code from ` +
+              `<a target="_blank" rel="noopener" href="https://github.com/ashtonsix/energetics">github.com/ashtonsix/energetics</a> ` +
+              `and fix it.</p>` +
+              `<p>What would you like to include in the recording?:</p>` +
+              `<label><input id="checkbox-select-video" type="checkbox" checked /> An actual video (exported as individual frames)</label><br />` +
+              `<label id="input-video-resolution"><input value="${resolution}" style="margin-left: 30px; width: 60px;" /> pixels across<br /></label>` +
+              `<label><input id="checkbox-select-state" type="checkbox" checked /> State at every step</label><br />` +
+              `<label><input id="checkbox-select-collisions" type="checkbox" checked /> Every collision (state immediately before collision)</label><br />` +
+              `<label><input id="checkbox-select-analysis" type="checkbox" /> Analysis at every step (disorder, measured via triangulation)</label><br />` +
+              `<div style="margin-top: 15px;">` +
+              `<button id="modal-close-2" style="font-size: 17px;">Cancel</button>` +
+              `<button id="select-folder" style="font-size: 17px; margin-left: 15px;">🎥 Select Folder</button>` +
+              `<button id="select-cached-folder" style="font-size: 17px; margin-left: 15px; display: ${
+                params.current._recordingDirectoryCached ? 'inline' : 'none'
+              };">🎥 Use /${
+                params.current._recordingDirectoryCached?.name
+              } again</button>` +
+              `</div>`
+            let close = () => {
+              document.body.removeChild(background)
+              document.body.removeChild(modal)
+            }
+            background.addEventListener('click', close)
+            let cl1 = modal.querySelector('#modal-close-1')
+            let cl2 = modal.querySelector('#modal-close-2')
+            let sel = modal.querySelector('#select-folder')
+            let cachedSelect = modal.querySelector('#select-cached-folder')
+            let vid = modal.querySelector('#checkbox-select-video')
+            let res = modal.querySelector('#input-video-resolution')
+            let resInput = modal.querySelector('#input-video-resolution input')
+            cl1.addEventListener('click', close)
+            cl2.addEventListener('click', close)
+            vid.addEventListener('change', () => {
+              res.style.display = vid.checked ? 'block' : 'none'
+            })
+            resInput.addEventListener('input', () => {
+              resolution = +clamp(resInput.value, 480, 4320).toFixed(0)
+            })
+            resInput.addEventListener('blur', () => {
+              resInput.value = resolution.toFixed(0)
+            })
+            let submit = (directory) => {
+              let c = (o) => document.querySelector(o).checked
+              let includeVideo = c('#checkbox-select-video')
+              let videoResolution = includeVideo ? resolution : null
+              let includeCollisions = c('#checkbox-select-collisions')
+              let includeState = c('#checkbox-select-state')
+              let includeAnalysis = c('#checkbox-select-analysis')
+              close()
+              params.current._recording = true
+              params.current._recordingMessage = null
+              setNonce(Math.random())
+              onMakeRecordingStart({
+                directory,
+                includeVideo,
+                videoResolution,
+                includeCollisions,
+                includeState,
+                includeAnalysis,
+              })
+            }
+            let d = new Date()
+            // prettier-ignore
+            let date =
+              d.getFullYear() + '-' + d.getMonth().toString().padStart(2, '0') + '-' + d.getDate().toString().padStart(2, '0') + '-' +
+              (d.getMilliseconds() * 1 + d.getSeconds() * 1000 + d.getMinutes() * 60000 + d.getHours() * 24 * 60000)
+            sel.addEventListener('click', async () => {
+              let directory = await window.showDirectoryPicker()
+              params.current._recordingDirectoryCached = directory
+              directory = await directory.getDirectoryHandle(date, {
+                create: true,
+              })
+              submit(directory)
+            })
+            cachedSelect.addEventListener('click', async () => {
+              let directory = params.current._recordingDirectoryCached
+              directory = await directory.getDirectoryHandle(date, {
+                create: true,
+              })
+              submit(directory)
+            })
+            document.body.appendChild(modal)
+          }}
+          style={{fontSize: 21}}
+        >
+          {params.current._recording
+            ? '■ Stop Recording'
+            : '🎥 Make Video Recording'}
+        </button>
+        {!!params.current._recordingMessage && (
+          <span style={{display: 'block', paddingTop: '5px'}} />
+        )}
+        {params.current._recordingMessage}
       </div>
       {!playing && (
-        <Select
-          label="Visualisation"
-          key="visualisation"
-          defaultValue={params.current.visualisation}
-          onChange={(value) => {
-            params.current.visualisation = value
-            submitChange()
-          }}
-          options={[
-            {value: 'particles', label: 'Particles'},
-            {value: 'delaunay', label: 'Delaunay Triangulation'},
-            {value: 'mstEuclidean', label: 'Nearby Particle Tree (A)'},
-            {value: 'mstBits', label: 'Nearby Particle Tree (B)'},
-            {value: 'boundaryStatus', label: 'Boundary (in / out)'},
-            {value: 'boundaryNormal', label: 'Boundary (normals)'},
-            {value: 'boundaryClosest', label: 'Boundary (closest point)'},
-          ]}
-        />
+        <div>
+          <Select
+            label="Visualisation"
+            key="visualisation.name"
+            defaultValue={params.current.visualisation.name}
+            onChange={(value) => {
+              const $p = params.current
+              $p.visualisation = {...$p.visualisation, name: value}
+              submitChange()
+              setNonce(Math.random())
+            }}
+            options={[
+              {value: 'particles', label: 'Particles'},
+              {value: 'delaunay', label: 'Triangulation'},
+              {value: 'mst', label: 'Tree'},
+              {value: 'boundary', label: 'Boundary'},
+            ]}
+          />
+          {['delaunay', 'mst'].includes(params.current.visualisation.name) && (
+            <Select
+              note="Metric (difference in...)"
+              key="visualisation.particlesMetric"
+              defaultValue={params.current.visualisation.particlesMetric}
+              onChange={(value) => {
+                const $p = params.current
+                $p.visualisation = {...$p.visualisation, particlesMetric: value}
+                submitChange()
+              }}
+              options={[
+                // {value: 'positionMagBits', label: 'Position (‖x‖)'},
+                {value: 'positionMagTouchingBits', label: 'Position (‖x‖ - r)'},
+                {value: 'positionThetaBits', label: 'Position (θ)'},
+                {value: 'velocityMagBits', label: 'Velocity (‖x‖)'},
+                {value: 'velocityThetaBits', label: 'Velocity (θ)'},
+                {value: 'radiusBits', label: 'Radius (r)'},
+                {value: 'totalBits', label: 'Combination'},
+              ]}
+            />
+          )}
+          {['delaunay', 'mst'].includes(params.current.visualisation.name) && (
+            <Select
+              note="Color Intensity"
+              key="visualisation.particlesColorIntensity"
+              defaultValue={params.current.visualisation.particlesColorIntensity.toString()}
+              onChange={(value) => {
+                const $p = params.current
+                $p.visualisation = {
+                  ...$p.visualisation,
+                  particlesColorIntensity: +value,
+                }
+                submitChange()
+              }}
+              options={[
+                {value: '-1', label: 'none'},
+                {value: '5', label: '1'},
+                {value: '4', label: '2'},
+                {value: '3', label: '3'},
+                {value: '2', label: '4'},
+                {value: '1', label: '5'},
+              ]}
+            />
+          )}
+          {params.current.visualisation.name === 'boundary' && (
+            <Select
+              note="Viewing"
+              key="visualisation.boundaryFeature"
+              defaultValue={params.current.visualisation.boundaryFeature}
+              onChange={(value) => {
+                const $p = params.current
+                $p.visualisation = {...$p.visualisation, boundaryFeature: value}
+                submitChange()
+              }}
+              options={[
+                {value: 'status', label: 'Inside / Outside'},
+                {value: 'normal', label: 'Normals'},
+                {value: 'closest', label: 'Closest Point'},
+              ]}
+            />
+          )}
+        </div>
       )}
       <Stats sim={sim} />
     </div>

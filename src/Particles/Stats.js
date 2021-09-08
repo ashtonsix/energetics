@@ -7,10 +7,13 @@ const clamp = (value, min, max) => {
 class Stats extends React.Component {
   sim = null
   rollingMeanWindow = 1
+  updatedAt = 0
   statsPlaying = true
   playButton = null
   playButtonText = null
   stepCount = null
+  stepsPerSecond = null
+  areaFilledPercent = null
   collisionCount = null
   d2bHistogram = []
   o2bHistogram = []
@@ -18,21 +21,26 @@ class Stats extends React.Component {
   constructor(props) {
     super(props)
     this.sim = props.sim
+    this.rollingMeanWindow = this.sim.stats.dataRetention
   }
   componentDidMount() {
     this.initialise()
-    this.sim.endCycleHook.UserControlsStats = ({
+    this.sim.updateHook.UserControlsStats = ({
       playing: simPlaying,
-      triggeredByReset,
+      trigger,
     }) => {
       this.playButton.style.display = simPlaying ? 'inline' : 'none'
-      if (triggeredByReset || (this.statsPlaying && simPlaying)) {
+      if (this.statsPlaying) {
         this.update()
       }
+      this.updateButton.style.display =
+        !simPlaying && this.updatedAt !== this.sim.stats.step
+          ? 'inline'
+          : 'none'
     }
   }
   componentWillUnmount() {
-    delete this.sim.endCycleHook.UserControlsStats
+    delete this.sim.updateHook.UserControlsStats
   }
   shouldComponentUpdate() {
     return false
@@ -47,12 +55,24 @@ class Stats extends React.Component {
         <button
           class="playButton"
           style="display: none; font-size: 1.5rem; background: none; border: none; outline: none; vertical-align: middle; line-height: 1.5; position: absolute;"
-        ></button>
+        >${this.statsPlaying ? '⏸' : '▶️'}</button>
+        <button
+          class="updateButton"
+          style="display: none;"
+        >Update</button>
         <div>Step:
           <canvas
             width="60px"
             height="18px"
             class="stepCount"
+            style="vertical-align: bottom;"
+          ></canvas>
+        </div>
+        <div>Steps per second (physics only):
+          <canvas
+            width="60px"
+            height="18px"
+            class="stepsPerSecond"
             style="vertical-align: bottom;"
           ></canvas>
         </div>
@@ -69,6 +89,14 @@ class Stats extends React.Component {
             class="histogramBuckets"
             style="width: 40px;"
           ></input>
+        </div>
+        <div>Area filled by particles:
+          <canvas
+            width="60px"
+            height="18px"
+            class="areaFilledPercent"
+            style="vertical-align: bottom;"
+          ></canvas>
         </div>
         <div>Collisions during last step:
           <canvas
@@ -136,16 +164,26 @@ class Stats extends React.Component {
     })
 
     this.playButton = el.querySelector('.playButton')
-    this.playButtonText = document.createTextNode('⏸')
-    this.playButton.appendChild(this.playButtonText)
+    this.playButtonText = this.playButton.childNodes[0]
     this.playButton.addEventListener('click', () => {
       this.statsPlaying = !this.statsPlaying
       this.playButtonText.nodeValue = this.statsPlaying ? '⏸' : '▶️'
     })
 
+    this.updateButton = el.querySelector('.updateButton')
+    this.updateButton.addEventListener('click', () => {
+      this.updateButton.style.display = 'none'
+      this.update()
+    })
+
     this.stepCount = el.querySelector('.stepCount').getContext('2d')
+    this.stepsPerSecond = el.querySelector('.stepsPerSecond').getContext('2d')
+    // prettier-ignore
+    this.areaFilledPercent = el.querySelector('.areaFilledPercent').getContext('2d')
     this.collisionCount = el.querySelector('.collisionCount').getContext('2d')
     this.stepCount.font = '16px sans-serif'
+    this.stepsPerSecond.font = '16px sans-serif'
+    this.areaFilledPercent.font = '16px sans-serif'
     this.collisionCount.font = '16px sans-serif'
     this.d2bHistogram = el.querySelector('.d2bHistogram').getContext('2d')
     this.o2bHistogram = el.querySelector('.o2bHistogram').getContext('2d')
@@ -158,6 +196,7 @@ class Stats extends React.Component {
   update() {
     let data = this.sim.stats.data.slice(-this.rollingMeanWindow)
     let empty = new Array(this.sim.stats.histogramBuckets).fill(0)
+    let stepDuration = 0
     let particleCollisionCount = 0
     let boundaryCollisionCount = 0
     let distanceToBoundary = empty.slice()
@@ -165,6 +204,7 @@ class Stats extends React.Component {
     let orientationOfCollidingParticles = empty.slice()
     // prettier-ignore
     for (let i = 0; i < data.length; i++) {
+        stepDuration += data[i].duration / data.length
         particleCollisionCount += data[i].particleCollisionCount / data.length
         boundaryCollisionCount += data[i].boundaryCollisionCount / data.length
         for (let j = 0; j < empty.length; j++) {
@@ -179,11 +219,20 @@ class Stats extends React.Component {
     let d2bMax = Math.max(...distanceToBoundary) || 1
     let o2bMax = Math.max(...orientationToBoundary) || 1
     let o2pMax = Math.max(...orientationOfCollidingParticles) || 1
+    let areaFilled =
+      (this.sim.particles.reduce((pv, p) => pv + p.radius ** 2 * Math.PI, 0) /
+        this.sim.boundaryCollisionDetector?.areaInside || 0) * 100
+    let stepsPerSecond = stepDuration ? 1000 / stepDuration : 0
 
+    this.updatedAt = this.sim.stats.step
     this.stepCount.clearRect(0, 0, 100, 100)
+    this.stepsPerSecond.clearRect(0, 0, 100, 100)
+    this.areaFilledPercent.clearRect(0, 0, 100, 100)
     this.collisionCount.clearRect(0, 0, 100, 100)
     this.stepCount.fillText(this.sim.stats.step.toLocaleString(), 0, 16)
-    this.collisionCount.fillText(collisions.toLocaleString(), 0, 16)
+    this.stepsPerSecond.fillText(stepsPerSecond.toFixed(0), 0, 16)
+    this.areaFilledPercent.fillText(areaFilled.toFixed(0) + '%', 0, 16)
+    this.collisionCount.fillText(collisions, 0, 16)
 
     this.d2bHistogram.clearRect(0, 0, this.sim.stats.histogramBuckets, 100)
     this.o2bHistogram.clearRect(0, 0, this.sim.stats.histogramBuckets, 100)

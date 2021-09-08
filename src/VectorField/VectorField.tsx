@@ -4,6 +4,7 @@ import useInterval from '../useInterval'
 import Sim from './Sim'
 import ConfigPreview from './ConfigPreview'
 import {defaultConfig, texturePacks} from './common'
+import ExplainerIntro from './Explainer'
 
 const optimiseParams = ({inputs, labels, params, map}) => {
   params = params.slice()
@@ -318,7 +319,7 @@ const VectorField = () => {
     playing ? 5 : null
   )
 
-  return (
+  let VectorField = (
     <div style={{display: 'flex'}}>
       <div
         ref={ref}
@@ -457,9 +458,9 @@ const VectorField = () => {
                   (sim ? sim.config : defaultConfig).display.quantity
                 }
               >
-                <option value="energy">Energy</option>
+                <option value="energy">Magnitude</option>
                 <option value="energyDelta">
-                  Change in Energy (since last step)
+                  Change in Magnitude (since last step)
                 </option>
                 <option value="direction">Direction</option>
               </select>
@@ -538,6 +539,20 @@ const VectorField = () => {
             />
           </>
         )}
+      </div>
+    </div>
+  )
+
+  return (
+    <div>
+      {VectorField}
+      <div
+        style={{
+          maxWidth: 'calc(max(min(100vh, 100vw) - 65px, 500px))',
+          fontSize: '18px',
+        }}
+      >
+        <ExplainerIntro />
       </div>
     </div>
   )

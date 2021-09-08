@@ -32,6 +32,11 @@ const vec = {
   lengthLessThan(a, b) {
     return a[0] ** 2 + a[1] ** 2 < b ** 2
   },
+  cosineSimilarity(a, b) {
+    let lengthProduct =
+      ((a[0] ** 2 + a[1] ** 2) * (b[0] ** 2 + b[1] ** 2)) ** 0.5
+    return vec.dot(a, b) / lengthProduct
+  },
   $setLength(a, b) {
     return vec.$mult(a, b / vec.length(a))
   },

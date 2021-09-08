@@ -1,8 +1,11 @@
-import MakeSet from 'union-find'
 import vec from '../vec'
 import Delaunator from 'delaunator'
+import Heap from 'heap'
 import LZMA from './LZMA'
+import {collide} from '../Simulation'
 const lzma = new LZMA()
+const {min, max, abs, floor, ceil, round, log2, PI, sin, cos, acos, atan2} =
+  Math
 
 // Delaunay Triangulation
 export const triangulate = {
@@ -34,120 +37,52 @@ export const triangulate = {
   },
 }
 
-const addSecondDegreeConnections = (edgelist, nodecount) => {
-  let grouped = new Array(nodecount).fill(null).map(() => [])
-
-  for (let i in edgelist) {
-    let [a, b] = edgelist[i]
-    grouped[a].push(b)
-    grouped[b].push(a)
-  }
-
-  let grouped2 = new Array(nodecount).fill(null).map(() => [])
-  for (let i in grouped) {
-    grouped2[i].push(...grouped[i])
-    for (let j of grouped[i]) {
-      grouped2[i].push(...grouped[j])
-    }
-  }
-
-  let edgelist2 = []
-  for (let a in grouped2) {
-    for (let b of grouped2[a]) {
-      edgelist2.push([+a, b])
-    }
-  }
-
-  let seen = {}
-  edgelist2 = edgelist2.filter(([a, b]) => {
-    if (a === b) return false
-    let k = Math.min(a, b) + ',' + Math.max(a, b)
-    if (seen[k]) return false
-    seen[k] = true
-    return true
-  })
-
-  return edgelist2
-}
-
-// Kruskal's Algorithm
+// Prim's lazy algorithm, with a modification to
+// include the grandparent in weight calculation
 export const minimumSpanningTree = (nodes, edges, getWeight) => {
-  let prunedEdges = []
+  let marked = new Array(nodes).fill(false)
 
-  let disjointSet = new MakeSet(nodes.length)
+  let priorityQueue = new Heap((a, b) => a[2] - b[2])
 
-  let weightedEdges = []
-  for (let i in edges) {
-    let u = edges[i][0]
-    let v = edges[i][1]
-    let e = {edge: edges[i], weight: getWeight(nodes[u], nodes[v])}
-    weightedEdges.push(e)
+  let parents = new Array(nodes).fill(-1)
+  let parentsFound = 0
+  let adjacent = new Array(nodes.length).fill(null).map(() => [])
+
+  for (let [a, b] of edges) {
+    adjacent[a].push(b)
+    adjacent[b].push(a)
   }
 
-  weightedEdges.sort(function (a, b) {
-    return a.weight - b.weight
-  })
-
-  for (let i = 0; i < weightedEdges.length; i++) {
-    let u = weightedEdges[i].edge[0]
-    let v = weightedEdges[i].edge[1]
-
-    if (disjointSet.find(u) !== disjointSet.find(v)) {
-      prunedEdges.push([u, v])
-      disjointSet.link(u, v)
+  let visit = (b) => {
+    marked[b] = true
+    for (let a of adjacent[b]) {
+      if (marked[a]) continue
+      let c = parents[b] || -1
+      // a=child, b=parent, c=grandparent
+      let w = getWeight(a, b, c)
+      priorityQueue.push([a, b, w])
     }
   }
 
-  let maxRank = disjointSet.ranks[0]
-  let maxRankIndex = 0
+  visit(0)
 
-  for (var i = 0; i < disjointSet.ranks.length; i++) {
-    if (disjointSet.ranks[i] > maxRank) {
-      maxRankIndex = i
-      maxRank = disjointSet.ranks[i]
-    }
+  while (priorityQueue.size() && parentsFound < nodes.length - 1) {
+    let e = priorityQueue.pop()
+    let [a, b] = e
+    if (marked[a]) continue
+
+    parents[a] = b
+    parentsFound++
+    visit(a)
   }
 
-  return {
-    edgelist: prunedEdges,
-    root: disjointSet.roots[maxRankIndex],
-  }
-}
-
-const edgelistToTree = (edgelist, root) => {
-  let grouped = new Array(edgelist.length + 1).fill(null).map(() => [])
-
-  for (let i in edgelist) {
-    let [a, b] = edgelist[i]
-    grouped[a].push(b)
-    grouped[b].push(a)
+  let mst = []
+  for (let a in parents) {
+    let b = parents[a]
+    if (b !== -1) mst.push([+a, b])
   }
 
-  let tree = {index: root, parent: -1, children: [], depth: 0}
-  let queue = [tree]
-  let nodelist = [tree]
-  while (queue.length) {
-    let node = queue.shift()
-    let children = grouped[node.index]
-    for (let j = 0; j < children.length; j++) {
-      if (children[j] !== node.parent) {
-        let child = {
-          index: children[j],
-          parent: node.index,
-          children: [],
-          depth: node.depth + 1,
-        }
-        node.children.push(child)
-        queue.push(child)
-        nodelist.push(child)
-      }
-    }
-  }
-  nodelist = nodelist.map((c) => ({
-    ...c,
-    children: c.children.map((c) => c.index),
-  }))
-  return {tree, nodelist}
+  return {edgelist: mst, root: 0}
 }
 
 export const getSample = (sim) => {
@@ -156,197 +91,215 @@ export const getSample = (sim) => {
   })
 }
 
-export const transformParticle = (
-  particle,
-  origin = {position: [0.5, 0.5], unitX: [1, 0], radius: 0}
-) => {
-  let originTheta = Math.atan2(origin.unitX[1], origin.unitX[0])
-  let position = vec.mult(vec.sub(particle.position, origin.position), 2)
-  let positionTheta = Math.atan2(position[1], position[0]) - originTheta
-  let velocity = vec.mult(particle.velocity, 1 / 2000)
-  let velocityTheta = Math.atan2(velocity[1], velocity[0]) - originTheta
-  let radius = particle.radius * 2
-
-  positionTheta = (positionTheta + Math.PI * 2) % (Math.PI * 2)
-  velocityTheta = (velocityTheta + Math.PI * 2) % (Math.PI * 2)
-  if (positionTheta > Math.PI) positionTheta -= Math.PI * 2
-  if (velocityTheta > Math.PI) velocityTheta -= Math.PI * 2
-
-  let updated = {
-    positionTheta,
-    positionMag: vec.length(position),
-    positionMagSubRadii: vec.length(position) - (radius + origin.radius),
-    velocityTheta,
-    velocityMag: vec.length(velocity),
-    radius,
-  }
-
-  return updated
+const scaleParticles = (particles) => {
+  return particles.map((p) => ({
+    position: vec.mult(p.position, 2),
+    velocity: vec.mult(p.velocity, 2 / 1000),
+    radius: p.radius * 2,
+  }))
 }
 
-const bits = (x) => Math.log2(Math.abs(x) + 2 ** -29) + 30
+const bits = (x) => log2(abs(x) + 2 ** -29) + 30
 
 const difference = (a, b, radial) => {
   let diff = a - b
   if (radial) {
-    diff = (diff + Math.PI * 2) % (Math.PI * 2)
-    if (diff > Math.PI) diff -= 2 * Math.PI
+    diff = (diff + PI * 2) % (PI * 2)
+    if (diff > PI) diff -= 2 * PI
   }
   return diff
 }
 
-const minabs = (a, b) => (Math.abs(a) <= Math.abs(b) ? a : b)
-
-const distanceBasic = (a, b) => vec.length(vec.sub(a.position, b.position))
-
-const distanceBits = (a, b) => {
-  let c = a
-  a = transformParticle(a, {
-    position: b.position,
-    unitX: b.velocity,
-    radius: b.radius * 2,
-  })
-  b = transformParticle(b, {
-    position: c.position,
-    unitX: c.velocity,
-    radius: c.radius * 2,
-  })
-  return (
-    // bits(minabs(a.positionTheta, b.positionTheta)) +
-    // 1 +
-    // bits(a.positionMagSubRadii) +
-    // bits(a.velocityTheta) +
-    bits(difference(a.velocityMag, b.velocityMag)) // +
-    // bits(difference(a.radius, b.radius))
-  )
-}
-
-export const dataToMST = (data, strategy) => {
-  if (!data.length) return []
-  let bitsStrategy = {bits: true, euclidean: false}[strategy]
-
-  let delaunay = triangulate.run(data, (p) => p.position)
-  let edges = []
-  triangulate.forEachEdge(delaunay, (e) => edges.push(e))
-  // if (bitsStrategy) {
-  //   edges = addSecondDegreeConnections(edges, data.length)
-  // }
-  let distanceMetric = bitsStrategy ? distanceBits : distanceBasic
-  let mst = minimumSpanningTree(data, edges, distanceMetric)
-  let {nodelist} = edgelistToTree(mst.edgelist, mst.root)
-
-  return nodelist
-}
-
-const prune = (edgelist) => {}
-
-export const prunedDelaunay = (data) => {
-  let distance = (a, b) => vec.length(vec.sub(a.position, b.position)) // - a.radius - b.radius
+export const getEdgesDelaunay = (data) => {
+  data = scaleParticles(data)
   let delaunay = triangulate.run(data, (p) => p.position)
   let edgelist = []
-  triangulate.forEachEdge(delaunay, ([a, b]) =>
-    edgelist.push([a, b, distance(data[a], data[b]), 0])
-  )
+  triangulate.forEachEdge(delaunay, ([a, b]) => {
+    let na = data[a]
+    let nb = data[b]
+    let positionMag = vec.length(vec.sub(na.position, nb.position))
+    let positionMagBits = bits(positionMag)
+    let positionMagTouching = positionMag - (na.radius + nb.radius)
+    let positionMagTouchingBits = bits(positionMagTouching)
+    let velocityMag = vec.length(vec.sub(na.velocity, nb.velocity))
+    let velocityMagBits = bits(velocityMag)
+    // prettier-ignore
+    let velocityTheta = acos(vec.cosineSimilarity(na.velocity, nb.velocity))
+    let velocityThetaBits = bits(velocityTheta)
+    let radius = na.radius - nb.radius
+    let radiusBits = bits(radius)
+    edgelist.push({
+      a,
+      b,
+      positionMag,
+      positionMagBits,
+      positionMagTouching,
+      positionMagTouchingBits,
+      positionTheta: null,
+      positionThetaBits: null,
+      velocityMag,
+      velocityMagBits,
+      velocityTheta,
+      velocityThetaBits,
+      radius,
+      radiusBits,
+      totalBits: null,
+    })
+  })
 
-  let edgelist2 = []
+  let nodelist = new Array(data.length).fill(null).map(() => [])
 
-  let nodelist = new Array(data.length)
-    .fill(null)
-    .map(() => ({edges: [], distanceTotal: 0}))
-
-  for (let e in edgelist) {
-    let [a, b] = edgelist[e]
-    nodelist[a].edges.push(edgelist[e])
-    nodelist[b].edges.push(edgelist[e])
-  }
-  for (let n of nodelist) {
-    n.distanceTotal = n.edges.reduce((pv, e) => pv + e[2], 0)
-  }
-  for (let e in edgelist) {
-    let [a, b, distance] = edgelist[e]
-    let na = nodelist[a]
-    let nb = nodelist[b]
-    let adjacentEdgeCount = na.edges.length + nb.edges.length - 2
-    let adjacentEdgeTotal = na.distanceTotal + nb.distanceTotal - distance * 2
-    let mean = adjacentEdgeTotal / adjacentEdgeCount
-    let deviationFactor = distance / mean
-    edgelist[e][3] += deviationFactor > 2 ? 1 : 0
-  }
-
-  for (let n of nodelist) {
-    n.distanceTotal = n.edges.reduce((pv, e) => pv + e[2] * e[3], 0)
-  }
-  for (let e in edgelist) {
-    let [a, b, distance] = edgelist[e]
-    let na = nodelist[a]
-    let nb = nodelist[b]
-    let adjacentEdgeCount = na.edges.length + nb.edges.length - 2
-    let adjacentEdgeTotal = na.distanceTotal + nb.distanceTotal - distance * 2
-    let mean = adjacentEdgeTotal / adjacentEdgeCount
-    let deviationFactor = distance / mean
-    edgelist[e][3] += deviationFactor > 2 ? 1 : 0
+  for (let e of edgelist) {
+    let {a, b} = e
+    nodelist[a].push(e)
+    nodelist[b].push(e)
   }
 
-  // return edgelist
+  let other = (n, e) => (e.a === +n ? e.b : e.a)
+  for (let n in nodelist) {
+    let edges = nodelist[n]
+    let angles = {}
+    for (let e of edges) {
+      let o = other(n, e)
+      let v = vec.sub(data[n].position, data[o].position)
+      angles[o] = atan2(v[1], v[0])
+    }
+    edges.sort((a, b) => {
+      return angles[other(n, a)] - angles[other(n, b)]
+    })
+    for (let i in edges) {
+      let a = edges[(+i - 1 + edges.length) % edges.length]
+      let b = edges[+i]
+      let c = edges[(+i + 1) % edges.length]
+      a = abs(difference(angles[other(n, a)], angles[other(n, b)], true))
+      c = abs(difference(angles[other(n, b)], angles[other(n, c)], true))
+      let diff = abs(max(a, c) - min(a, c) * round(max(a, c) / min(a, c)))
+      // compare(59, 180) = 3, because |177 - 180| = 3
+      if (b.positionTheta === null) {
+        b.positionTheta = diff
+      } else {
+        b.positionTheta += diff
+        b.positionTheta /= 2
+        b.positionThetaBits = bits(b.positionTheta)
+      }
+    }
+  }
 
-  // for (let i in nodelist) {
-  //   let n = nodelist[i].sort((a, b) => a[3] - b[3])
-  //   let mean = 0
-  //   for (let [, , , distance] of n) mean += distance / n.length
-  //   for (let [, , e, distance] of n) {
-  //     if (!edgelist[e][2]) edgelist[e][2] += distance / mean
-  //     else {
-  //       edgelist[e][2] *= distance / mean
-  //       edgelist[e][2] = edgelist[e][2] > 2 ? 1 : 0
-  //     }
-  //   }
-  // }
+  for (let e of edgelist) {
+    e.totalBits =
+      e.positionMagTouchingBits +
+      e.positionThetaBits +
+      e.velocityMagBits +
+      e.velocityThetaBits +
+      e.radiusBits
+  }
 
   return edgelist
 }
 
-const MSTCompression = (strategy) => (data) => {
-  const nodelist = dataToMST(data, strategy)
+// first do: let edges = getEdgesDelaunay(data)
+export const getEdgesMST = (data, edges, metric) => {
+  data = scaleParticles(data)
+  let edgemap = new Array(edges.length)
+  let edgelist = new Array(edges.length)
+  edges.forEach((e, i) => {
+    edgemap[min(e.a, e.b) + ',' + max(e.a, e.b)] = e
+    edgelist[i] = [e.a, e.b]
+  })
 
-  let compressedData = new Array(nodelist.length).fill(null)
-  let nil = {position: [0, 0], velocity: [0, 0], radius: 0}
-  for (let i = 0; i < nodelist.length; i++) {
-    let n = nodelist[i]
-    let parent = data[n.parent] || nil
-    let node = data[n.index]
-    let child = node
-    node = transformParticle(node, {
-      position: parent.position,
-      unitX: parent.velocity,
-      radius: parent.radius * 2,
-    })
-    parent = transformParticle(parent, {
-      position: child.position,
-      unitX: child.velocity,
-      radius: child.radius * 2,
-    })
-    let compressed = {
-      positionTheta: minabs(node.positionTheta, parent.positionTheta),
-      positionMag: node.positionMag,
-      positionMagSubRadii: node.positionMagSubRadii,
-      velocityTheta: node.velocityTheta,
-      velocityMag: node.velocityMag - parent.velocityMag,
-      radius: node.radius - parent.radius,
-    }
-    compressedData[n.index] = compressed
-  }
+  let mst = minimumSpanningTree(data, edgelist, (a, b, c) => {
+    if (c === -1) c = a
+    let e = edgemap[min(a, b) + ',' + max(a, b)]
+    let v1 = vec.sub(data[a].position, data[b].position)
+    let v2 = vec.sub(data[b].position, data[c].position)
+    let angle1 = atan2(v1[1], v1[0])
+    let angle2 = atan2(v2[1], v2[0])
+    e.positionTheta = difference(angle1, angle2, true)
+    e.positionThetaBits = bits(e.positionTheta)
+    e.totalBits =
+      e.positionMagTouchingBits +
+      e.positionThetaBits +
+      e.velocityMagBits +
+      e.velocityThetaBits +
+      e.radiusBits
+    return e[metric]
+  })
 
-  return compressedData
+  return mst.edgelist.map(([a, b]) => edgemap[min(a, b) + ',' + max(a, b)])
 }
 
-export const MSTCompressionEuclidean = MSTCompression('euclidean')
+export const getEdgesBaseline = (data) => {
+  return data.map((d, i) => {
+    let v = vec.sub(d.position, [1, 1]) // relative to center
+    let positionMag = vec.length(v)
+    let positionMagBits = bits(positionMag)
+    let positionMagTouching = positionMag - d.radius
+    let positionMagTouchingBits = bits(positionMagTouching)
+    let positionTheta = atan2(v[1], v[0])
+    let positionThetaBits = bits(positionTheta)
+    let velocityMag = vec.length(d.velocity)
+    let velocityMagBits = bits(velocityMag)
+    let velocityTheta = atan2(d.velocity[1], d.velocity[0])
+    let velocityThetaBits = bits(velocityTheta)
+    let radius = d.radius
+    let radiusBits = bits(radius)
+    let totalBits =
+      positionMagTouchingBits +
+      positionThetaBits +
+      velocityMagBits +
+      velocityThetaBits +
+      radiusBits
 
-export const MSTCompressionBits = MSTCompression('bits')
+    return {
+      a: i,
+      b: -1,
+      positionMag,
+      positionMagBits,
+      positionMagTouching,
+      positionMagTouchingBits,
+      positionTheta,
+      positionThetaBits,
+      velocityMag,
+      velocityMagBits,
+      velocityTheta,
+      velocityThetaBits,
+      radius,
+      radiusBits,
+      totalBits,
+    }
+  })
+}
 
-export const LZMATotalBits = (data) => {
+const getMean = (a, f) => {
+  return a.reduce((pv, v) => pv + f(v), 0) / a.length
+}
+const getPercentiles = (a, k, p) => {
+  let sorted = a.slice().sort((a, b) => abs(a[k]) - abs(b[k]))
+  return p.map((p) => {
+    let i
+    i = floor(a.length * p)
+    i = max(min(i, a.length - 1), 0)
+    return abs(sorted[i][k])
+  })
+}
+const getVarwidthBits = (a, k) => {
+  k = k.replace('Bits', '')
+  let value = 0
+  let sorted = a.map((v) => abs(v[k])).sort((a, b) => a - b)
+  let Varwidths = [0.5, 0.75, 0.875, 1].map((x) => {
+    return sorted[floor(x * (a.length - 1))]
+  })
+  for (let i in a) {
+    let c = Varwidths.filter((b) => b >= abs(a[i][k]))
+    let v = ceil(bits(min(...c)))
+    value += v / a.length
+  }
+  return value
+}
+const getLZMABits = (data) => {
   let dataBuffer = new Int32Array(data.length)
   for (let i in data) {
-    dataBuffer[i] = data[i] * 2 ** 29
+    dataBuffer[i] = floor(data[i] * 2 ** 29)
   }
 
   return new Promise((resolve, reject) => {
@@ -362,196 +315,222 @@ export const LZMATotalBits = (data) => {
   })
 }
 
-export const analyse = (data, plusOneBitForPositionTheta) => {
-  let {min, max, abs, floor, ceil} = Math
-  let stats = {}
-  for (let k in data[0]) {
-    stats[k] = {
-      min: abs(data[0][k]),
-      minBits: bits(data[0][k]),
-      max: abs(data[0][k]),
-      maxBits: bits(data[0][k]),
-      mean: null,
-      meanBits: null,
-      trueMean: null,
-      meanDeviation: null,
-      meanDeviationBits: null,
-      maxDeviation: 0,
-      maxDeviationBits: 0,
-      meanBitsColumnStrategy: 0,
-      meanBitsBucketStrategy: 2,
-    }
-  }
-  for (let i in data) {
-    for (let k in data[i]) {
-      stats[k].min = min(stats[k].min, abs(data[i][k]))
-      stats[k].max = max(stats[k].max, abs(data[i][k]))
-      stats[k].mean += abs(data[i][k]) / data.length
-      stats[k].meanBits += bits(data[i][k]) / data.length
-      stats[k].trueMean += data[i][k] / data.length
-    }
-  }
-  for (let i in data) {
-    for (let k in data[i]) {
-      let deviation = difference(
-        data[i][k],
-        stats[k].trueMean,
-        k === 'positionTheta' || k === 'velocityTheta'
-      )
-      stats[k].meanDeviation += abs(deviation) / data.length
-      stats[k].meanDeviationBits += bits(deviation) / data.length
-      stats[k].maxDeviation = max(stats[k].maxDeviation, abs(deviation))
-    }
-  }
-  for (let k in data[0]) {
-    stats[k].minBits = bits(stats[k].min)
-    stats[k].maxBits = bits(stats[k].max)
-    stats[k].meanBitsColumnStrategy = ceil(bits(stats[k].max))
-    stats[k].maxDeviationBits = bits(stats[k].maxDeviation)
-  }
-
-  stats.total = {
-    minBits: 32 * Object.keys(data[0]).length,
-    maxBits: 0,
-    meanBits: null,
-    meanDeviationBits: null,
-    maxDeviationBits: 0,
-    meanBitsColumnStrategy: 0,
-    meanBitsBucketStrategy: 2 * Object.keys(data[0]).length,
-    meanBitsLZMA: null,
-  }
-
-  let totalContributors = {
-    positionTheta: 0,
-    positionMagSubRadii: 1,
-    velocityTheta: 2,
-    velocityMag: 3,
-    radius: 4,
-  }
-  for (let i in data) {
-    let total = {bits: 0, bitsDeviation: 0}
-    for (let k in totalContributors) {
-      let deviation = difference(
-        data[i][k],
-        stats[k].trueMean,
-        k === 'positionTheta' || k === 'velocityTheta'
-      )
-
-      total.bits += bits(data[i][k])
-      total.bitsDeviation += bits(deviation)
-    }
-    stats.total.minBits = min(stats.total.minBits, total.bits)
-    stats.total.maxBits = max(stats.total.maxBits, total.bits)
-    stats.total.meanBits += total.bits / data.length
-    stats.total.maxDeviationBits = max(
-      stats.total.maxDeviationBits,
-      total.bitsDeviation
-    )
-    stats.total.meanDeviationBits += total.bitsDeviation / data.length
-  }
-
-  for (let k in totalContributors) {
-    stats.total.meanBitsColumnStrategy += stats[k].meanBitsColumnStrategy
-  }
-
-  let buckets = {}
-  for (let k in data[0]) {
-    let sorted = data.map((d) => abs(d[k])).sort((a, b) => a - b)
-    buckets[k] = [0.5, 0.75, 0.875, 1].map((x) => {
-      return sorted[floor(x * (data.length - 1))]
+export const statsBreakdown = (data, sampleName, async) => {
+  let byMethod = [
+    {method: 'baseline', data: getEdgesBaseline(data)},
+    {method: 'delaunay', data: getEdgesDelaunay(data)},
+  ]
+  for (let metric of [
+    'positionMag',
+    // 'positionMagBits',
+    // 'positionMagTouchingBits',
+    // 'positionThetaBits',
+    // 'velocityMagBits',
+    // 'velocityThetaBits',
+    // 'radiusBits',
+    'totalBits',
+  ]) {
+    let delaunay = byMethod[1].data
+    byMethod.push({
+      method: 'mst.' + metric,
+      data: getEdgesMST(data, delaunay, metric),
     })
-  }
-  for (let k in data[0]) {
-    for (let i in data) {
-      let c = buckets[k].filter((b) => b >= abs(data[i][k]))
-      let v = ceil(bits(min(...c)))
-      stats[k].meanBitsBucketStrategy += v / data.length
-      if (totalContributors[k] != null) {
-        stats.total.meanBitsBucketStrategy += v / data.length
-      }
-    }
-  }
-
-  if (plusOneBitForPositionTheta) {
-    stats.positionTheta.minBits++
-    stats.positionTheta.maxBits++
-    stats.positionTheta.meanBits++
-    stats.positionTheta.meanDeviationBits++
-    stats.positionTheta.maxDeviationBits++
-    stats.total.minBits++
-    stats.total.maxBits++
-    stats.total.meanBits++
-    stats.total.meanDeviationBits++
-    stats.total.maxDeviationBits++
-  }
-
-  let flat = {total: []}
-  for (let k in data[0]) {
-    flat[k] = []
-    for (let i in data) {
-      flat[k].push(data[i][k])
-      if (totalContributors[k] != null) {
-        flat.total.push(data[i][k])
-      }
-    }
-  }
-
-  return Promise.all(
-    Object.keys(flat).map((key) => {
-      return LZMATotalBits(flat[key]).then((totalBits) => {
-        stats[key].meanBitsLZMA = totalBits / data.length
-      })
-    })
-  ).then(() => stats)
-}
-
-export const generateFullStats = async (data, sampleName = null) => {
-  let statsObject = {
-    basic: await analyse(data.map((p) => transformParticle(p))),
-    MSTEuclidean: await analyse(MSTCompressionEuclidean(data), true),
-    MSTInformation: await analyse(MSTCompressionBits(data), true),
   }
   let stats = []
+  for (let {method, data} of byMethod) {
+    let s = []
+    for (let attribute of [
+      'positionMag',
+      'positionMagBits',
+      'positionMagTouching',
+      'positionMagTouchingBits',
+      'positionTheta',
+      'positionThetaBits',
+      'velocityMag',
+      'velocityMagBits',
+      'velocityTheta',
+      'velocityThetaBits',
+      'radius',
+      'radiusBits',
+      'totalBits',
+    ]) {
+      let isBits = attribute.endsWith('Bits')
+      let mean = getMean(data, (v) => abs(v[attribute]))
 
-  for (let method in statsObject) {
-    for (let attribute in statsObject[method]) {
-      for (let stat in statsObject[method][attribute]) {
-        let value = statsObject[method][attribute][stat]
-        stats.push({sample: sampleName, method, attribute, stat, value})
+      let [min, p5, p25, p50, p75, p95, max] = getPercentiles(
+        data,
+        attribute,
+        [0, 0.05, 0.25, 0.5, 0.75, 0.95, 1]
+      )
+      let ss = {min, p5, p25, p50, p75, p95, max, mean}
+      let trueMean = getMean(data, (v) => v[attribute.replace('Bits', '')])
+      if (!isBits) {
+        ss.trueMean = trueMean
       }
+      if (attribute !== 'totalBits') {
+        ss.meanDeviation = getMean(data, (v) => {
+          let diff = difference(
+            v[attribute.replace('Bits', '')],
+            trueMean,
+            attribute.includes('Theta')
+          )
+          return isBits ? bits(diff) : abs(diff)
+        })
+      }
+      if (isBits && attribute !== 'totalBits') {
+        ss.column = ceil(ss.max)
+        ss.varwidth = getVarwidthBits(data, attribute)
+        let lzmaPrepared = data.map((v) => v[attribute])
+        ss.lzma = getLZMABits(lzmaPrepared).then((v) => v / data.length)
+      }
+      for (let stat in ss) {
+        let statName = isBits ? stat + 'Bits' : stat
+        // prettier-ignore
+        s.push({sample: sampleName, method, attribute: attribute.replace('Bits', ''), stat: statName, value: ss[stat]})
+      }
+    }
+    let totalContributors = [
+      'positionMagTouching',
+      'positionTheta',
+      'velocityMag',
+      'velocityTheta',
+      'radius',
+    ]
+    let trueMeans = {}
+    for (let ss of s) {
+      if (!totalContributors.includes(ss.attribute)) continue
+      if (ss.stat === 'trueMean') trueMeans[ss.attribute] = ss.value
+    }
+    let meanDeviationBitsTotal = getMean(data, (v) => {
+      let deviation = 0
+      for (let k in trueMeans) {
+        deviation += bits(difference(v[k], trueMeans[k], k.includes('Theta')))
+      }
+      return deviation
+    })
+    let columnBitsTotal = 0
+    let varwidthBitsTotal = 0
+    for (let ss of s) {
+      if (!totalContributors.includes(ss.attribute)) continue
+      if (ss.stat === 'columnBits') columnBitsTotal += ss.value
+      if (ss.stat === 'varwidthBits') varwidthBitsTotal += ss.value
+    }
+    let lzmaPrepared = []
+    for (let d of data) {
+      for (let k of totalContributors) {
+        lzmaPrepared.push(d[k])
+      }
+    }
+    let lzmaBitsTotal = getLZMABits(lzmaPrepared).then((v) => v / data.length)
+    for (let {stat, value} of [
+      {stat: 'meanDeviationBits', value: meanDeviationBitsTotal},
+      {stat: 'columnBits', value: columnBitsTotal},
+      {stat: 'varwidthBits', value: varwidthBitsTotal},
+      {stat: 'lzmaBits', value: lzmaBitsTotal},
+    ]) {
+      s.push({sample: sampleName, method, attribute: 'total', stat, value})
+    }
+    for (let ss of s) stats.push(ss)
+  }
+
+  let p = []
+  for (let s of stats) {
+    if (s.value instanceof Promise) {
+      p.push(s.value)
+      s.value = s.value.then((v) => {
+        s.value = v
+        return v
+      })
+    }
+  }
+
+  if (async) {
+    return Promise.all(p).then(() => stats)
+  } else {
+    return stats
+  }
+}
+
+export const statsBreakdownMini = (data) => {
+  data = getEdgesDelaunay(data)
+
+  let stats = []
+  for (let attribute of [
+    'positionMagTouchingBits',
+    'positionThetaBits',
+    'velocityMagBits',
+    'velocityThetaBits',
+    'radiusBits',
+    'totalBits',
+  ]) {
+    let mean = getMean(data, (v) => abs(v[attribute]))
+
+    let [min, p5, p25, p50, p75, p95, max] = getPercentiles(
+      data,
+      attribute,
+      [0, 0.05, 0.25, 0.5, 0.75, 0.95, 1]
+    )
+    let ss = {min, p5, p25, p50, p75, p95, max, mean}
+    for (let stat in ss) {
+      let statName = stat + 'Bits'
+      // prettier-ignore
+      stats.push({attribute: attribute.replace('Bits', ''), stat: statName, value: ss[stat]})
     }
   }
 
   return stats
 }
 
-// does meanBits for MSTCompressionBits only
-export const generateShortStats = (data) => {
-  let compressed = MSTCompressionBits(data)
-
-  let stats = {
-    positionTheta: 0,
-    positionMagSubRadii: 0,
-    velocityTheta: 0,
-    velocityMag: 0,
-    radius: 0,
-  }
-  for (let i in compressed) {
-    for (let k in compressed[i]) {
-      stats[k] += bits(compressed[i][k]) / compressed.length
+export const analyseCollisions = (
+  collisions,
+  {elasticity, constantVelocity, constantMass}
+) => {
+  console.log(collisions)
+  let norm = collisions.map(([p0, p1]) => {
+    p0 = {...p0, mass: constantMass ? 1 : p0.radius ** 2}
+    p1 = {...p1, mass: constantMass ? 1 : p1.radius ** 2}
+    p1.mass = p1.mass / p0.mass
+    p0.mass = 1
+    p1.position = vec.sub(p1.position, p0.position)
+    p0.position = [0, 0]
+    let vThetaInitial = difference(
+      atan2(p1.velocity[1], p1.velocity[0]),
+      atan2(p0.velocity[1], p0.velocity[0]),
+      true
+    )
+    let shouldFlip = p1.position[1] < 0
+    if (shouldFlip) {
+      p1.position[1] *= -1
+      vThetaInitial *= -1
     }
-  }
-
-  let total = 0
-  for (let i in compressed) {
-    for (let k in stats) {
-      total += bits(compressed[i][k]) / compressed.length
+    let vMagInitial = vec.length(p1.velocity) / vec.length(p0.velocity)
+    p1.velocity = [
+      cos(vThetaInitial) * vMagInitial,
+      sin(vThetaInitial) * vMagInitial,
+    ]
+    p0.velocity = [1, 0]
+    let x_velocityMag = vec.length(vec.sub(p1.velocity, p0.velocity))
+    collide(p0, p1, elasticity, constantVelocity)
+    let y_velocityMag = vec.length(vec.sub(p1.velocity, p0.velocity))
+    return {
+      x: {
+        positionTheta: atan2(p1.position[1], p1.position[0]),
+        velocityTheta: vThetaInitial,
+        velocityMag: x_velocityMag,
+        mass: p1.mass,
+      },
+      y: {
+        velocityTheta: difference(
+          atan2(p1.velocity[1], p1.velocity[0]),
+          atan2(p0.velocity[1], p0.velocity[0]),
+          true
+        ),
+        velocityMag: y_velocityMag,
+      },
     }
-  }
-
-  stats.total = total
-  stats.total++
-  stats.positionTheta++
-
-  return stats
+  })
+  norm.forEach((c, i) => {
+    console.log(JSON.stringify(collisions[i]))
+    console.log(JSON.stringify(c))
+  })
 }

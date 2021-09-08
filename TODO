@@ -10,3 +10,20 @@ evolution
 possible staring points for 3d graph viz:
 https://github.com/anvaka/ngraph.pixel
 https://github.com/vasturiano/three-fatline
+
+
+hidden features for particle simulator:
+
+link to state: energetics.com/particles?state=https://github.com/hdjfhjdfs.csv
+custom boundary
+make specific particles tracers
+version state
+fix video:
+  - state missing spawn information
+  - arena background missing from still frames
+
+
+discrete field:
+https://github.com/disneyresearch/jeri
+
+upgrade discrete field simulator: can do 12 substances with fully dynamic flow, length, direction & attraction

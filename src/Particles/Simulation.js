@@ -5,7 +5,7 @@ import {
 import vec from './vec'
 import boundaryGenerators from './boundaryGenerators'
 
-const collide = (p0, p1, elasticity, constantVelocity) => {
+export const collide = (p0, p1, elasticity, constantVelocity) => {
   const radii = p0.radius + p1.radius
   const normal = vec.sub(p0.position, p1.position)
   if (!vec.lengthLessThan(normal, radii)) {
@@ -64,8 +64,6 @@ const collideBoundary = (p, boundary, elastic, bcd) => {
   let pTangentMag = vec.dot(ut, relativePosition)
 
   if (Math.abs(pTangentMag) > p.radius + bcd.cellSize * 2) {
-    // handle edge case where arena shape changes and
-    // particle is deep inside boundary
     vec.$add(p.position, vec.mult(ut, -pTangentMag))
   }
   if (pNormalMag > p.radius) return false
@@ -90,10 +88,12 @@ const collideBoundary = (p, boundary, elastic, bcd) => {
       ut = [-un[1], un[0]]
       let projected = vec.dot(un, p.velocity) * 2
       if (projected < 0) vec.$sub(p.velocity, vec.mult(un, projected))
+    } else {
+      stillCollides = null
     }
   }
 
-  return true
+  return [stillCollides]
 }
 
 const clamp = (value, min, max) => {
@@ -118,6 +118,7 @@ const shuffle = (array) => {
 
 export default class Simulation {
   params = {
+    softwareVersion: 0,
     particleCount: 500,
     particleRadiusMin: 0,
     particleRadiusMax: 0,
@@ -134,9 +135,10 @@ export default class Simulation {
       ),
     },
     spawnArea: null, // null OR {x: 0.5, y: 0.5, radius: 0.03, rotation: Math.PI * 0, rotationSpread: Math.PI * 0.15}
-    redFraction: 10 / 100,
+    tracerFraction: 10 / 100,
     trailDisplay: 'disabled', // disabled, enabled, or trailOnly
-    trailLength: 20,
+    trailLength: 30,
+    trailForTracersOnly: false,
     mass: 'constant',
   }
   constructor() {
@@ -156,31 +158,25 @@ export default class Simulation {
       this.params.particleRadiusMax * 2
     )
   }
+  recording = null
   particles = []
   boundary = []
   stats = {
     step: 0,
     data: [],
     dataRetention: 100,
-    histogramBuckets: 40,
+    histogramBuckets: 300,
   }
   boundaryCollisionDetector = null
   connector = {
-    createSprite(particle) {
-      let sprite = {}
-      return sprite
-    },
-    destroySprite(sprite) {
-      return true
-    },
-    updateSprite(sprite, particle) {
-      return true
-    },
+    onParticleAdded(particle) {},
+    onParticleRemoved(particle) {},
     readRotationFast(particle) {
       return Math.atan2(particle.velocity[1], particle.velocity[0])
     },
+    draw() {},
   }
-  endCycleHook = {}
+  updateHook = {}
   getSuggestedRadius(particleCount = null) {
     if (particleCount === null) particleCount = this.params.particleCount
     const totalArea = this.boundaryCollisionDetector.areaInside * 0.7
@@ -208,7 +204,7 @@ export default class Simulation {
         ? Math.abs($.particleSizeDistribution) + 1
         : 1 / (1 + $.particleSizeDistribution)
     particle.radius = $.particleRadiusMin + Math.random() ** power * range
-    particle.red = Math.random() < $.redFraction ? true : false
+    particle.uid = Math.random().toString(36).slice(2, 13).padEnd(11, '0')
 
     for (let i = 0; i < 500; i++) {
       const distance = Math.random() ** 0.5 * spawnArea.radius
@@ -234,14 +230,15 @@ export default class Simulation {
       let pNormalMag = vec.dot(normal, relativePosition)
       if (pNormalMag > particle.radius) break
     }
-    particle.sprite = this.connector.createSprite(particle)
+    particle.tracer = Math.random() < this.params.tracerFraction ? true : false
+    this.connector.onParticleAdded(particle)
     this.particles.push(particle)
     return particle
   }
   destroyParticle(r = null) {
     if (r === null) r = Math.floor(Math.random() * this.particles.length)
     const p = this.particles.splice(r, 1)[0]
-    this.connector.destroySprite(p.sprite)
+    this.connector.onParticleRemoved(p)
     return true
   }
   // adds, removes & scales particles to satisfy configured parameters
@@ -257,9 +254,6 @@ export default class Simulation {
     }
 
     if ($P.length < count) {
-      // radius is a random value between min/max,
-      // velocity is the value that preserves average momentum,
-      // every added particle is given the same momentum
       let averageArea = 0
       for (let i = 0; i < $P.length; i++) {
         averageArea += $P[i].radius ** 2
@@ -309,7 +303,9 @@ export default class Simulation {
     )
 
     for (let i = 0; i < $P.length; i++) {
-      const r = ($P[i].radius - min) * (desiredRange / range) + desiredMin
+      let r
+      if (range < e / 2) r = min + Math.random() * desiredRange
+      else r = ($P[i].radius - min) * (desiredRange / range) + desiredMin
       $P[i].radius = r
       $P[i].mass = $p.mass === 'constant' ? 1 : r ** 2
       if ($p.particleVelocityConstant) {
@@ -334,16 +330,22 @@ export default class Simulation {
     }
   }
   cycle({playing}) {
+    let durationStart = performance.now()
     this.normaliseParticles()
     if (playing) {
       // prettier-ignore
       let s = {
+        duration: 0,
         particleCollisionCount: 0,
         boundaryCollisionCount: 0,
         distanceToBoundary: new Array(this.stats.histogramBuckets).fill(0),
         orientationToBoundary: new Array(this.stats.histogramBuckets).fill(0),
         orientationOfCollidingParticles: new Array(this.stats.histogramBuckets).fill(0)
       }
+      if (this.recording?.options?.includeCollisions) {
+        this.recording.collisions = []
+      }
+      let collisionRecorder = this.recording?.collisions
       this.stats.step += 1
       const {
         simulationSpeed,
@@ -360,12 +362,31 @@ export default class Simulation {
         p.position[1] = Math.min(Math.max(p.position[1], 0), 0.999999)
         const boundary = this.boundaryCollisionDetector.retrieve(p)
         if (boundary) {
-          s.boundaryCollisionCount += collideBoundary(
+          let r
+          if (collisionRecorder) {
+            r = {
+              uid: p.uid,
+              position: p.position.slice(),
+              velocity: p.velocity.slice(),
+              radius: p.radius,
+            }
+          }
+          let b = collideBoundary(
             p,
             boundary,
             boundaryElasticity,
             this.boundaryCollisionDetector
           )
+          s.boundaryCollisionCount += !!b
+
+          if (collisionRecorder && b) {
+            this.recording.collisions.push({
+              particle0: r,
+              particle1: null,
+              boundary0: boundary,
+              boundary1: b[0] || null,
+            })
+          }
         }
       }
 
@@ -401,6 +422,25 @@ export default class Simulation {
             o2p[j] += 1
             s.particleCollisionCount += 1
 
+            if (collisionRecorder) {
+              this.recording.collisions.push({
+                particle0: {
+                  uid: p.uid,
+                  position: p.position.slice(),
+                  velocity: p.velocity.slice(),
+                  radius: p.radius,
+                },
+                particle1: {
+                  uid: candidate.uid,
+                  position: candidate.position.slice(),
+                  velocity: candidate.velocity.slice(),
+                  radius: candidate.radius,
+                },
+                boundary0: null,
+                boundary1: null,
+              })
+            }
+
             collide(p, candidate, particleElasticity, particleVelocityConstant)
           }
         }
@@ -423,18 +463,16 @@ export default class Simulation {
         let k = clamp(Math.floor(distance * d2b.length), 0, d2b.length - 1)
         d2b[k] += 1
       }
+      s.duration = performance.now() - durationStart
       this.stats.data.push(s)
       if (this.stats.data.length > this.stats.dataRetention) {
         this.stats.data.shift()
       }
     }
-    for (const k in this.endCycleHook) {
-      this.endCycleHook[k]({playing})
+    for (const k in this.updateHook) {
+      this.updateHook[k]({playing, trigger: 'cycle'})
     }
-    for (let i = 0; i < this.particles.length; i++) {
-      const p = this.particles[i]
-      this.connector.updateSprite(p.sprite, p)
-    }
+    return this.connector.draw()
   }
   updateBoundary(boundary) {
     this.params.boundary = boundary
@@ -451,28 +489,30 @@ export default class Simulation {
       let more = i < this.boundary.length - 1
       this.boundaryCollisionDetector.insert(polygon, inside, more)
     })
-  }
-  updateRedFraction(redFraction) {
-    let redCount = 0
-    for (let i = 0; i < this.particles.length; i++) {
-      redCount += this.particles[i].red
+    for (const k in this.updateHook) {
+      this.updateHook[k]({playing: '???', trigger: 'bcd'})
     }
-    let desiredRedCount = Math.round(this.particles.length * redFraction)
-    let discrepancy = desiredRedCount - redCount
+  }
+  updateTracerFraction(tracerFraction) {
+    let tracerCount = 0
+    for (let i = 0; i < this.particles.length; i++) {
+      tracerCount += !!this.particles[i].tracer
+    }
+    let desiredTracerCount = Math.round(this.particles.length * tracerFraction)
+    let discrepancy = desiredTracerCount - tracerCount
     let wrongColor = []
     for (let i = 0; i < this.particles.length; i++) {
       let p = this.particles[i]
-      if (p.red && discrepancy < 0) wrongColor.push(p)
-      if (!p.red && discrepancy > 0) wrongColor.push(p)
+      if (p.tracer && discrepancy < 0) wrongColor.push(p)
+      if (!p.tracer && discrepancy > 0) wrongColor.push(p)
     }
     shuffle(wrongColor)
     discrepancy = Math.abs(discrepancy)
     for (let i = 0; i < discrepancy; i++) {
       let p = wrongColor[i]
-      this.connector.destroySprite(p.sprite)
-      p.sprite = null
-      p.red = !p.red
-      p.sprite = this.connector.createSprite(p)
+      p.tracer = !p.tracer
+      this.connector.onParticleRemoved(p)
+      this.connector.onParticleAdded(p)
     }
   }
   updateSizeDistribution(newSizeDistribution) {
@@ -494,6 +534,14 @@ export default class Simulation {
       r = r ** (newPower / oldPower)
       r = r * range + $.particleRadiusMin
       p.radius = r
+    }
+  }
+  resetStats() {
+    this.stats = {
+      step: 0,
+      data: [],
+      dataRetention: this.stats.dataRetention,
+      histogramBuckets: this.stats.histogramBuckets,
     }
   }
 }

@@ -1,5 +1,7 @@
 import React, {useState} from 'react'
-import {generateFullStats} from './analysis'
+import {statsBreakdown} from './analysis'
+import Tex from '../Tex'
+import csv from '../csv'
 
 const AnalysisDisplayTableOne = ({
   data,
@@ -8,33 +10,55 @@ const AnalysisDisplayTableOne = ({
   columns = [],
   notes = [],
 }) => {
+  let [, setNonce] = useState(0)
+  let p = []
   let dataGrouped = {}
   data.forEach(({group, column, row, value}) => {
     if (!dataGrouped[group]) dataGrouped[group] = {}
     if (!dataGrouped[group][column]) dataGrouped[group][column] = {}
     dataGrouped[group][column][row] = value
+    if (value instanceof Promise) {
+      dataGrouped[group][column][row] = null
+      p.push(value)
+      value.then((value) => {
+        dataGrouped[group][column][row] = value
+      })
+    }
   })
+  if (p.length) Promise.all(p).then(() => setNonce(Math.random()))
   return (
     <table className="stats-table">
       <tbody>
-        <tr style={{fontWeight: 'bold'}}>
-          <td style={{width: '125px'}}></td>
-          {groups.map((g) => (
-            <td colSpan={columns.length} key={g.key}>
-              {g.label}
+        {groups.length > 1 && (
+          <tr style={{fontWeight: 'bold'}}>
+            <td style={{width: '125px'}}>
+              {columns.length > 1 ? '' : 'attribute'}
             </td>
-          ))}
-        </tr>
-        <tr style={{fontWeight: 'bold'}}>
-          <td></td>
-          {[].concat(
-            ...groups.map((g) => {
-              return columns.map((c) => {
-                return <td key={g.key + '.' + c.key}>{c.label}</td>
+            {groups.map((g) => (
+              <td colSpan={columns.length} key={g.key}>
+                {g.label}
+              </td>
+            ))}
+          </tr>
+        )}
+        {columns.length > 1 && (
+          <tr style={{fontWeight: 'bold'}}>
+            <td>attribute</td>
+            {[].concat(
+              ...(groups.length ? groups : [{key: 'blank'}]).map((g) => {
+                return columns.map((c) => {
+                  return <td key={g.key + '.' + c.key}>{c.label}</td>
+                })
               })
-            })
-          )}
-        </tr>
+            )}
+          </tr>
+        )}
+        {columns.length <= 1 && groups.length <= 1 && (
+          <tr style={{fontWeight: 'bold'}}>
+            <td>attribute</td>
+            <td>value</td>
+          </tr>
+        )}
         {notes.map((note, i) => {
           return (
             <tr key={i}>
@@ -46,18 +70,24 @@ const AnalysisDisplayTableOne = ({
           return (
             <tr key={r.key}>
               <td>{r.label}</td>
-              {[].concat(
-                ...groups.map((g) => {
-                  return columns.map((c) => {
-                    let value = dataGrouped[g.key]?.[c.key]?.[r.key]
-                    return (
-                      <td key={g.key + '.' + c.key}>
-                        {typeof value !== 'number' ? null : value.toFixed(8)}
-                      </td>
-                    )
-                  })
-                })
-              )}
+              {!columns.length || !groups.length
+                ? new Array(Math.max(columns.length, groups.length, 1))
+                    .fill(null)
+                    .map((_, i) => <td key={i}></td>)
+                : [].concat(
+                    ...groups.map((g) => {
+                      return columns.map((c) => {
+                        let value = dataGrouped[g.key]?.[c.key]?.[r.key]
+                        return (
+                          <td key={g.key + '.' + c.key}>
+                            {typeof value !== 'number'
+                              ? null
+                              : value.toFixed(8)}
+                          </td>
+                        )
+                      })
+                    })
+                  )}
             </tr>
           )
         })}
@@ -66,8 +96,8 @@ const AnalysisDisplayTableOne = ({
   )
 }
 
-const AnalysisDisplayTable = ({defaultStats = []}) => {
-  const [stats, setStats] = useState(defaultStats)
+const AnalysisDisplayTable = ({statsFromProps = []}) => {
+  const [uploadedStats, setUploadedStats] = useState([])
   const [showOptions, setShowOptions] = useState(false)
   const [tableOrganisation, setTableOrganisation] = useState([
     'stat',
@@ -75,41 +105,56 @@ const AnalysisDisplayTable = ({defaultStats = []}) => {
     'sample',
   ])
   // prettier-ignore
-  const [indices, setIndices] = useState({
+  let [indices, setIndices] = useState({
     stat: [
-      {key: 'min', label: 'min', active: false},
-      {key: 'minBits', label: 'min (bits)', active: false},
-      {key: 'max', label: 'max', active: false},
-      {key: 'maxBits', label: 'max (bits)', active: false},
-      {key: 'trueMean', label: 'true mean', active: false},
+      {key: 'p5', label: 'p5', active: false},
+      {key: 'p5Bits', label: 'p5 (bits)', active: false},
+      {key: 'p25', label: 'p25', active: false},
+      {key: 'p25Bits', label: 'p25 (bits)', active: false},
+      {key: 'p50', label: 'p50', active: false},
+      {key: 'p50Bits', label: 'p50 (bits)', active: false},
+      {key: 'p75', label: 'p75', active: false},
+      {key: 'p75Bits', label: 'p75 (bits)', active: false},
+      {key: 'p95', label: 'p95', active: false},
+      {key: 'p95Bits', label: 'p95 (bits)', active: false},
       {key: 'mean', label: 'mean', active: false},
       {key: 'meanBits', label: 'mean (bits)', active: true},
       {key: 'meanDeviation', label: 'mean deviation', active: false},
       {key: 'meanDeviationBits', label: 'mean deviation (bits)', active: false},
-      {key: 'maxDeviation', label: 'max deviation', active: false},
-      {key: 'maxDeviationBits', label: 'max deviation (bits)', active: false},
-      {key: 'meanBitsColumnStrategy', label: 'columns (bits)', active: false},
-      {key: 'meanBitsBucketStrategy', label: 'buckets (bits)', active: false},
-      {key: 'meanBitsLZMA', label: 'LZMA (bits)', active: false},
+      {key: 'columnBits', label: 'columns (bits)', active: false},
+      {key: 'varwidthBits', label: 'buckets (bits)', active: false},
+      {key: 'lzmaBits', label: 'LZMA (bits)', active: false},
     ],
     method: [
-      {key: 'basic', label: 'relative to origin', shortLabel: 'origin', active: true},
-      {key: 'MSTEuclidean', label: 'relative to nearby particle (A)', shortLabel: 'relative (A)', active: true},
-      {key: 'MSTInformation', label: 'relative to nearby particle (B)', shortLabel: 'relative (B)', active: true},
+      {key: 'baseline',  label: 'relative to origin', shortLabel: 'origin', active: false},
+      {key: 'delaunay', label: 'relative to nearby particle (Δ)', shortLabel: 'relative (Δ)', active: true},
+      {key: 'mst.positionMag', label: 'relative to nearby particle (→)', shortLabel: 'relative (→)', active: false},
+      {key: 'mst.totalBits', label: 'relative to nearby particle (Σ)', shortLabel: 'relative (Σ)', active: false},
     ],
-    sample: Array.from(new Set(defaultStats.map((s) => s.sample))).map((key) => {
-      return {key: key, label: key, active: true}
-    }),
+    sample: [],
     attribute: [
-      {key: 'positionTheta', label: `position ( $\\theta$ )`, active: true},
-      {key: 'positionMag', label: `true position ($\\|x\\|$)`, active: false},
-      {key: 'positionMagSubRadii', label: `position ($\\|x\\|$)`, active: true},
-      {key: 'velocityTheta', label: `velocity ( $\\theta$ )`, active: true},
-      {key: 'velocityMag', label: `velocity ($\\|x\\|$)`, active: true},
-      {key: 'radius', label: `radius`, active: true},
-      {key: 'total', label: `total`, active: true},
+      {key: 'positionMag', label: <>position (<Tex>{`\\|x\\|`}</Tex>)</>, active: false},
+      {key: 'positionMagTouching', label: <>position (<Tex>{`\\|x\\| - r`}</Tex>)</>, active: true},
+      {key: 'positionTheta', label: <>position (<Tex>{`\\theta`}</Tex>)</>, active: true},
+      {key: 'velocityMag', label: <>velocity (<Tex>{`\\|x\\|`}</Tex>)</>, active: true},
+      {key: 'velocityTheta', label: <>velocity (<Tex>{`\\theta`}</Tex>)</>, active: true},
+      {key: 'radius', label: <>radius</>, active: true},
+      {key: 'total', label: <>total</>, active: true},
     ]
   })
+
+  let stats = [].concat(statsFromProps, uploadedStats)
+  indices = {
+    ...indices,
+    sample: Array.from(new Set(stats.map((s) => s.sample))).map((key) => {
+      let current = indices.sample.find((i) => i.key === key)
+      return {
+        key: key,
+        label: key,
+        active: current?.active == null ? true : current.active,
+      }
+    }),
+  }
 
   let tableMap = {}
   indices[tableOrganisation[0]].forEach(({key}) => {
@@ -118,23 +163,33 @@ const AnalysisDisplayTable = ({defaultStats = []}) => {
   stats.forEach((stat) => {
     let table = stat[tableOrganisation[0]]
     if (!tableMap[table]) return
-    tableMap[table].push({
+    let s = {
       group: stat[tableOrganisation[1]],
       column: stat[tableOrganisation[2]],
       row: stat.attribute,
       value: stat.value,
-    })
+    }
+    if (s.value instanceof Promise) {
+      s.value.then((v) => {
+        s.value = v
+        return v
+      })
+    }
+    tableMap[table].push(s)
   })
-  let tables = indices[tableOrganisation[0]].map(({key, label, active}) => ({
-    key,
-    label,
-    active,
-    data: tableMap[key],
-  }))
+  let tables = indices[tableOrganisation[0]]
+    .filter((t) => t.active)
+    .map(({key, label}) => ({key, label, data: tableMap[key]}))
   let elements = []
   tables.forEach((table) => {
-    if (!table.active || !stats.length) return
-    elements.push(<p key={table.key + '.label'}>{table.label}</p>)
+    if (!stats.length) return
+    if (tables.length > 1) {
+      elements.push(<p key={table.key + '.label'}>{table.label}</p>)
+    } else {
+      elements.push(
+        <span key="padding" style={{display: 'block', paddingTop: '1em'}} />
+      )
+    }
     elements.push(
       <AnalysisDisplayTableOne
         key={table.key + '.table'}
@@ -150,6 +205,7 @@ const AnalysisDisplayTable = ({defaultStats = []}) => {
       />
     )
   })
+
   const caps = (s) => s[0].toUpperCase() + s.slice(1)
   return (
     <div>
@@ -174,10 +230,10 @@ const AnalysisDisplayTable = ({defaultStats = []}) => {
       </label>
       <div
         style={{
-          display: showOptions ? 'block' : 'none',
-          columnCount: 4,
-          columnWidth: '240px',
-          maxHeight: '300px',
+          display: showOptions ? 'flex' : 'none',
+          flexDirection: 'column',
+          flexWrap: 'wrap',
+          maxHeight: '290px',
         }}
       >
         {[
@@ -199,63 +255,60 @@ const AnalysisDisplayTable = ({defaultStats = []}) => {
             <div
               key={index.key}
               style={{
-                width: '100%',
                 display: 'inline-block',
+                flexBasis: 0,
                 paddingTop: '10px',
               }}
             >
               {index.label}:{' '}
-              {indices[index.key].map(({key, label, active}) => (
-                <label key={key} style={{fontSize: '0.8em', display: 'block'}}>
-                  <input
-                    type="checkbox"
-                    onChange={() => {
-                      let updated = JSON.parse(JSON.stringify(indices))
-                      let u = updated[index.key]
-                      u = u.find((u) => u.key === key)
-                      u.active = !u.active
-                      setIndices(updated)
+              <div
+                style={
+                  index.key === 'stat' ? {columnCount: 2, width: '340px'} : {}
+                }
+              >
+                {indices[index.key].map(({key, label, active}) => (
+                  <label
+                    key={key}
+                    style={{fontSize: '0.8em', display: 'block'}}
+                  >
+                    <input
+                      type="checkbox"
+                      onChange={() => {
+                        let updated = {
+                          ...indices,
+                          [index.key]: indices[index.key].map((v) => ({...v})),
+                        }
+                        let u = updated[index.key]
+                        u = u.find((u) => u.key === key)
+                        u.active = !u.active
+                        setIndices(updated)
+                      }}
+                      defaultChecked={active}
+                    />
+                    {label}
+                  </label>
+                ))}
+                {index.key === 'sample' && (
+                  <button
+                    style={{display: 'block'}}
+                    onClick={() => {
+                      csv
+                        .upload()
+                        .then(({filename, data}) => {
+                          return statsBreakdown(
+                            csv.parse(data.split('\n').slice(2)),
+                            filename.split('.')[0]
+                          )
+                        })
+                        .then((sample) => {
+                          setUploadedStats(uploadedStats.concat(sample))
+                        })
                     }}
-                    defaultChecked={active}
-                  />
-                  {label}
-                </label>
-              ))}
-              {index.key === 'sample' && (
-                <button
-                  onClick={() => {
-                    let fileUpload = document.createElement('input')
-                    fileUpload.type = 'file'
-                    fileUpload.addEventListener('change', (e) => {
-                      let file = fileUpload.files[0]
-                      let sampleName = file.name.split('.')[0]
-                      const reader = new FileReader()
-                      new Promise((resolve, reject) => {
-                        reader.onload = (event) => resolve(event.target.result)
-                        reader.onerror = (error) => reject(error)
-                        reader.readAsText(file)
-                      })
-                        .then((content) => {
-                          const sample = JSON.parse(content)
-                          return generateFullStats(sample, sampleName)
-                        })
-                        .then((s) => {
-                          setStats(stats.concat(s))
-                          let updated = JSON.parse(JSON.stringify(indices))
-                          updated.sample.push({
-                            key: sampleName,
-                            label: sampleName,
-                            active: true,
-                          })
-                          setIndices(updated)
-                        })
-                    })
-                    fileUpload.click()
-                  }}
-                >
-                  Upload Sample
-                </button>
-              )}
+                  >
+                    Upload Another Sample
+                  </button>
+                )}
+              </div>
             </div>
           )
         })}

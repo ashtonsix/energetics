@@ -344,7 +344,7 @@ const DiffusionDemo = () => {
           <a
             href="https://www.youtube.com/watch?v=ovJcsL7vyrk"
             target="_blank"
-            rel="noreferrer"
+            rel="noopener"
           >
             logistic map function
           </a>{' '}
