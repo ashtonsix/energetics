@@ -7,11 +7,7 @@ import UserControls from './UserControls'
 import TrailFilter from './TrailFilter'
 import ExplainerIntro from './Explainer/ExplainerIntro'
 import AnalysisDisplayTable from './analysis/AnalysisDisplayTable'
-import {
-  statsBreakdown,
-  statsBreakdownMini,
-  analyseCollisions,
-} from './analysis/analysis'
+import {statsBreakdown, statsBreakdownMini} from './analysis/analysis'
 import csv from './csv'
 export {default as ParticlesExplainer} from './Explainer/Explainer'
 export {default as ParticlesExplainerMechanicsDetailed} from './Explainer/ExplainerMechanicsDetailed'
@@ -193,7 +189,6 @@ const Particles = () => {
         params,
         particles,
       } = sim
-      console.log(step)
       let directory = recording.options.directory
       particles = particles.slice()
       params = JSON.parse(JSON.stringify(params))
@@ -241,7 +236,7 @@ const Particles = () => {
             'spawnArea.rotationSpread',
           ]
         )
-        filecontent += '\n'
+        filecontent += '\n\n'
         filecontent += csv.serialise(particles, [
           'uid',
           'position.0',
@@ -302,7 +297,6 @@ const Particles = () => {
         )
         await writeHandle.close()
       }
-      console.log(step)
     }
     sim.connector.clearDrawing = () => {
       app.renderer.clear()
@@ -436,26 +430,6 @@ const Particles = () => {
         >
           Reset
         </button>
-        <button
-          onClick={() => {
-            csv.upload().then(([{data: filecontent}]) => {
-              let collisions = csv.parse(filecontent)
-              collisions = collisions.filter((c) => c.particle1.uid)
-              collisions = collisions.map((c) => [c.particle0, c.particle1])
-              analyseCollisions(collisions, {
-                elasticity: 1,
-                constantMass: false,
-                constantVelocity: false,
-              })
-            })
-          }}
-          style={{
-            fontSize: '2rem',
-            marginLeft: 10,
-          }}
-        >
-          Analyse Collisions
-        </button>
         <br />
         <UserControls
           playing={state.current.playing}
@@ -552,7 +526,8 @@ const Particles = () => {
           <p>
             These analyses measure disorder, based on how dissimilar the
             particles are from each other (lower value = less disorderd). For
-            more details, see <a href="/particles-text">/particles-text</a>
+            more details, see{' '}
+            <a href="/particle-simulation/text">/particle-simulation/text</a>
           </p>
         )}
         {!!analyses.length && (
@@ -561,7 +536,8 @@ const Particles = () => {
         <h2 style={analyses.length ? {} : {marginTop: 0}}>What is this?</h2>
         <ExplainerIntro />
         <p>
-          Read more at <a href="/particles-text">/particles-text</a>
+          Read more at{' '}
+          <a href="/particle-simulation/text">/particle-simulation/text</a>
         </p>
       </div>
     </div>

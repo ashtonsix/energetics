@@ -1,5 +1,5 @@
 import React from 'react'
-import Tex from '../Particles/Tex'
+import Tex from './Tex'
 
 const CrapWriting = () => {
   return (

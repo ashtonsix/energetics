@@ -1,5 +1,5 @@
 import React from 'react'
-import Tex from '../Tex'
+import Tex from '../../Text/Tex'
 
 const Labeled = ({label, children}) => (
   <span style={{display: 'block'}}>

@@ -65,6 +65,52 @@ const clamp = (value, min, max) => {
   return Math.min(Math.max(+value || 0, min), max)
 }
 
+const stitchCSVs = async (cb) => {
+  const files = await csv.upload({multiple: true, onStart: cb})
+
+  let result = {
+    settings: '',
+    state: '',
+    collisions: '',
+    analysis: '',
+  }
+
+  let files2 = []
+  for (let {filename, data} of files) {
+    let [datatype, step] = filename.replace('.csv', '').split('_')
+    if (datatype === 'state') {
+      let [settings, state] = data.split('\n\n')
+      files2.push({data: settings, datatype: 'settings', step})
+      files2.push({data: state, datatype: 'state', step})
+    } else {
+      files2.push({data, datatype, step})
+    }
+  }
+
+  files2.sort((a, b) => +a.step - +b.step)
+
+  for (let {datatype, step, data} of files2) {
+    if (!data) continue
+    data = data.split('\n').filter((l) => l)
+    if (data.length <= 1) continue
+    if (!result[datatype]) {
+      result[datatype] = 'step,' + data[0]
+    }
+    data =
+      '\n' +
+      data
+        .slice(1)
+        .map((line) => step + ',' + line)
+        .join('\n')
+    result[datatype] += data
+  }
+
+  if (result.settings) csv.download(result.settings, 'settings.csv')
+  if (result.state) csv.download(result.state, 'state.csv')
+  if (result.collisions) csv.download(result.collisions, 'collisions.csv')
+  if (result.analysis) csv.download(result.analysis, 'analysis.csv')
+}
+
 const UserControls = ({
   playing,
   onChange,
@@ -682,8 +728,8 @@ const UserControls = ({
           onClick={() => {
             csv.upload().then(([{filename, data}]) => {
               try {
-                data = data.split('\n').filter((line) => line !== '')
-                let newParams = csv.parse(data.slice(0, 2))[0]
+                let [settingsCSV, particlesCSV] = data.split('\n\n')
+                let newParams = csv.parse(settingsCSV)[0]
                 if (typeof newParams.particleRadiusMin !== 'number') {
                   throw new Error('Missing Parameter')
                 }
@@ -694,7 +740,7 @@ const UserControls = ({
                   ...params.current.visualisation,
                   name: 'particles',
                 }
-                let newParticles = csv.parse(data.slice(2))
+                let newParticles = csv.parse(particlesCSV)
                 newParams.tracerFraction =
                   newParticles.reduce((pv, p) => pv + p.tracer, 0) /
                     newParticles.length || 0
@@ -858,6 +904,11 @@ const UserControls = ({
               };">🎥 Use /${
                 params.current._recordingDirectoryCached?.name
               } again</button>` +
+              `<p>To stitch the video frames together into a single file, try <a rel="noopener" target="_blank" href="https://www.google.com/search?q=create+video+from+frames+ffmpeg">ffmpeg</a>. ` +
+              `To stitch multiple CSVs together, click below (may not work if the files have been renamed, ` +
+              `or one tries to combine many large files at once):</p>` +
+              `<button id="combine-csv" style="font-size: 17px;">♋ Combine CSVs</button> ` +
+              `<span id="combine-csv-working" style="display: none;">Working...</span>` +
               `</div>`
             let close = () => {
               document.body.removeChild(background)
@@ -868,6 +919,8 @@ const UserControls = ({
             let cl2 = modal.querySelector('#modal-close-2')
             let sel = modal.querySelector('#select-folder')
             let cachedSelect = modal.querySelector('#select-cached-folder')
+            let stitch = modal.querySelector('#combine-csv')
+            let stitchWorking = modal.querySelector('#combine-csv-working')
             let vid = modal.querySelector('#checkbox-select-video')
             let res = modal.querySelector('#input-video-resolution')
             let resInput = modal.querySelector('#input-video-resolution input')
@@ -921,6 +974,14 @@ const UserControls = ({
                 create: true,
               })
               submit(directory)
+            })
+            stitch.addEventListener('click', async () => {
+              await stitchCSVs(() => {
+                stitch.disabled = true
+                stitchWorking.style.display = 'inline'
+              })
+              stitch.disabled = false
+              stitchWorking.style.display = 'none'
             })
             document.body.appendChild(modal)
           }}

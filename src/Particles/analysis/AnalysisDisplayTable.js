@@ -1,6 +1,6 @@
 import React, {useState} from 'react'
 import {statsBreakdown} from './analysis'
-import Tex from '../Tex'
+import Tex from '../../Text/Tex'
 import csv from '../csv'
 
 const AnalysisDisplayTableOne = ({
@@ -43,7 +43,7 @@ const AnalysisDisplayTableOne = ({
         )}
         {columns.length > 1 && (
           <tr style={{fontWeight: 'bold'}}>
-            <td>attribute</td>
+            <td>metric</td>
             {[].concat(
               ...(groups.length ? groups : [{key: 'blank'}]).map((g) => {
                 return columns.map((c) => {
@@ -55,7 +55,7 @@ const AnalysisDisplayTableOne = ({
         )}
         {columns.length <= 1 && groups.length <= 1 && (
           <tr style={{fontWeight: 'bold'}}>
-            <td>attribute</td>
+            <td>metric</td>
             <td>value</td>
           </tr>
         )}
@@ -122,14 +122,14 @@ const AnalysisDisplayTable = ({statsFromProps = []}) => {
       {key: 'meanDeviation', label: 'mean deviation', active: false},
       {key: 'meanDeviationBits', label: 'mean deviation (bits)', active: false},
       {key: 'columnBits', label: 'columns (bits)', active: false},
-      {key: 'varwidthBits', label: 'buckets (bits)', active: false},
+      {key: 'varwidthBits', label: 'varwidth (bits)', active: false},
       {key: 'lzmaBits', label: 'LZMA (bits)', active: false},
     ],
     method: [
       {key: 'baseline',  label: 'relative to origin', shortLabel: 'origin', active: false},
-      {key: 'delaunay', label: 'relative to nearby particle (Δ)', shortLabel: 'relative (Δ)', active: true},
-      {key: 'mst.positionMag', label: 'relative to nearby particle (→)', shortLabel: 'relative (→)', active: false},
-      {key: 'mst.totalBits', label: 'relative to nearby particle (Σ)', shortLabel: 'relative (Σ)', active: false},
+      {key: 'delaunay', label: 'relative to nearby particle (A)', shortLabel: 'relative (Δ)', active: true},
+      {key: 'mst.positionMag', label: 'relative to nearby particle (B)', shortLabel: 'relative (→)', active: false},
+      {key: 'mst.totalBits', label: 'relative to nearby particle (C)', shortLabel: 'relative (Σ)', active: false},
     ],
     sample: [],
     attribute: [
@@ -294,9 +294,11 @@ const AnalysisDisplayTable = ({statsFromProps = []}) => {
                     onClick={() => {
                       csv
                         .upload()
-                        .then(({filename, data}) => {
+                        .then(([{filename, data}]) => {
                           return statsBreakdown(
-                            csv.parse(data.split('\n').slice(2)),
+                            csv.parse(
+                              data.split('\n\n').slice(-1)[0].split('\n')
+                            ),
                             filename.split('.')[0]
                           )
                         })
@@ -305,7 +307,7 @@ const AnalysisDisplayTable = ({statsFromProps = []}) => {
                         })
                     }}
                   >
-                    Upload Another Sample
+                    Upload state.csv
                   </button>
                 )}
               </div>

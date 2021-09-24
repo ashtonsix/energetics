@@ -2,10 +2,8 @@ import vec from '../vec'
 import Delaunator from 'delaunator'
 import Heap from 'heap'
 import LZMA from './LZMA'
-import {collide} from '../Simulation'
 const lzma = new LZMA()
-const {min, max, abs, floor, ceil, round, log2, PI, sin, cos, acos, atan2} =
-  Math
+const {min, max, abs, floor, ceil, round, log2, PI, acos, atan2} = Math
 
 // Delaunay Triangulation
 export const triangulate = {
@@ -99,7 +97,7 @@ const scaleParticles = (particles) => {
   }))
 }
 
-const bits = (x) => log2(abs(x) + 2 ** -29) + 30
+export const bits = (x) => log2(abs(x) + 2 ** -29) + 30
 
 const difference = (a, b, radial) => {
   let diff = a - b
@@ -479,58 +477,4 @@ export const statsBreakdownMini = (data) => {
   }
 
   return stats
-}
-
-export const analyseCollisions = (
-  collisions,
-  {elasticity, constantVelocity, constantMass}
-) => {
-  console.log(collisions)
-  let norm = collisions.map(([p0, p1]) => {
-    p0 = {...p0, mass: constantMass ? 1 : p0.radius ** 2}
-    p1 = {...p1, mass: constantMass ? 1 : p1.radius ** 2}
-    p1.mass = p1.mass / p0.mass
-    p0.mass = 1
-    p1.position = vec.sub(p1.position, p0.position)
-    p0.position = [0, 0]
-    let vThetaInitial = difference(
-      atan2(p1.velocity[1], p1.velocity[0]),
-      atan2(p0.velocity[1], p0.velocity[0]),
-      true
-    )
-    let shouldFlip = p1.position[1] < 0
-    if (shouldFlip) {
-      p1.position[1] *= -1
-      vThetaInitial *= -1
-    }
-    let vMagInitial = vec.length(p1.velocity) / vec.length(p0.velocity)
-    p1.velocity = [
-      cos(vThetaInitial) * vMagInitial,
-      sin(vThetaInitial) * vMagInitial,
-    ]
-    p0.velocity = [1, 0]
-    let x_velocityMag = vec.length(vec.sub(p1.velocity, p0.velocity))
-    collide(p0, p1, elasticity, constantVelocity)
-    let y_velocityMag = vec.length(vec.sub(p1.velocity, p0.velocity))
-    return {
-      x: {
-        positionTheta: atan2(p1.position[1], p1.position[0]),
-        velocityTheta: vThetaInitial,
-        velocityMag: x_velocityMag,
-        mass: p1.mass,
-      },
-      y: {
-        velocityTheta: difference(
-          atan2(p1.velocity[1], p1.velocity[0]),
-          atan2(p0.velocity[1], p0.velocity[0]),
-          true
-        ),
-        velocityMag: y_velocityMag,
-      },
-    }
-  })
-  norm.forEach((c, i) => {
-    console.log(JSON.stringify(collisions[i]))
-    console.log(JSON.stringify(c))
-  })
 }

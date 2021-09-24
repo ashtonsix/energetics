@@ -1,5 +1,6 @@
 import React from 'react'
 import ExplainerMechanics from './ExplainerMechanics'
+import ExplainerMethodology from './ExplainerMethodology'
 
 const Explainer = () => {
   return (
@@ -11,10 +12,7 @@ const Explainer = () => {
     >
       <h1>Ashton's Particle Simulator</h1>
       <ExplainerMechanics />
-      <h2>
-        Methodology: How I Discovered Interesting Things And Measured Them
-      </h2>
-      {/* https://www.youtube.com/watch?v=zRxI0DaQrag&list=PLZRRxQcaEjA7LX19uAySGlc9hmprBxfEP&index=5 */}
+      <ExplainerMethodology />
     </div>
   )
 }

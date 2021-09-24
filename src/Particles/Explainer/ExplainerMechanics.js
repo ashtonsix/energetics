@@ -1,5 +1,5 @@
 import React from 'react'
-import Tex from '../Tex'
+import Tex from '../../Text/Tex'
 
 const ExplainerMechanics = () => {
   return (
@@ -122,8 +122,8 @@ const ExplainerMechanics = () => {
         the particle attributes, a guide to unlocking the simulation's hidden
         features, and the full set of mathematical equations used, including
         approximations used, see{' '}
-        <a href="/particles-text/mechanics-detailed">
-          /particles-text/mechanics-detailed
+        <a href="/particle-simulation/text/mechanics-detailed">
+          /particle-simulation/text/mechanics-detailed
         </a>
         . For the source code, see{' '}
         <a

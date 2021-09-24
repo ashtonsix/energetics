@@ -1,5 +1,3 @@
-import PQueue from '../../node_modules/p-queue/dist/index'
-
 const isNumber = /^[0-9-.]+$/
 
 const parseString = (str) => {
@@ -82,45 +80,64 @@ const parse = (csv) => {
     })
 }
 
+let createPromiseQueue = (concurrency) => {
+  let queue = []
+  let inProgress = 0
+  let add = (f) => {
+    return new Promise((resolve, reject) => {
+      queue.push(() => {
+        let r = f()
+        r.then(resolve)
+        r.catch(reject)
+        r.then(() => inProgress--)
+        r.catch(() => inProgress--)
+      })
+    })
+  }
+
+  let i = setInterval(() => {
+    let run = queue.splice(0, concurrency - inProgress)
+    inProgress += run.length
+    run.forEach((f) => f())
+  }, 100)
+
+  let destroy = () => {
+    clearInterval(i)
+  }
+
+  return {add, destroy}
+}
+
 let upload = (options = {}) => {
-  let {multiple = false} = options
-  let queue = new PQueue({concurreny: 32})
+  let {multiple = false, onStart = () => {}} = options
   return new Promise((resolve, reject) => {
     let el = document.createElement('input')
     el.type = 'file'
     el.multiple = multiple
-    el.addEventListener('change', () => {
-      Promise.all(
-        Array.from(el.files).map((file) =>
-          queue.add(() => {
+    el.addEventListener('change', async () => {
+      onStart()
+      let pQueue = createPromiseQueue(64)
+      let result = []
+      await Promise.all(
+        Array.from(el.files).map((file, i) => {
+          return pQueue.add(() => {
             return new Promise((resolve, reject) => {
               let reader = new FileReader()
               reader.onload = () => {
-                resolve({filename: file.name, data: reader.result})
+                result.push({filename: file.name, data: reader.result})
+                resolve()
               }
               reader.onabort = (e) => reject(e)
               reader.onerror = (e) => reject(e)
               reader.readAsText(file)
             })
           })
-        )
+        })
       )
-        .then((files) => resolve(files))
-        .catch((error) => reject(error))
+      pQueue.destroy()
+      resolve(result)
     })
     el.click()
-  })
-}
-
-window.stitchManySpreadsheetsTogether = () => {
-  // let combines = []
-  upload({multiple: true}).then((files) => {
-    files.forEach(({filename, data}) => {
-      console.log(filename)
-      console.log(data)
-      // let step = filename.match(/(0-9)+/)
-      // data
-    })
   })
 }
 

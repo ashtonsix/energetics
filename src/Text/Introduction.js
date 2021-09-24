@@ -1,5 +1,5 @@
 import React from 'react'
-import Tex from '../Particles/Tex'
+import Tex from './Tex'
 
 const Introduction = () => {
   return (
@@ -318,10 +318,9 @@ const Introduction = () => {
         <strong>Note:</strong> There are two common definitions of information
         in science literature but they are not even slightly interchangeable.
         The one we just introduced originates with Andrey Kolmogorov. The other
-        originates with Claude Shannon and Ludwig Boltzmann. To eliminate
-        ambiguity, when we write “information” that always refers to
-        Kolmogorov's information, when we write “signal” that always refers to
-        Shannon's information.
+        originates with Claude Shannon. To eliminate ambiguity, when we write
+        “information” that always refers to Kolmogorov's information, when we
+        write “signal” that always refers to Shannon's information.
       </p>
       <p>
         If we were to take the two best theories from physics, quantum mechanics
@@ -553,10 +552,8 @@ const Introduction = () => {
           src="/introduction/discrete_field_2.png"
         />
         <p>
-          See this simulator and details on its mechanics at{' '}
-          <a href="/discrete-field-simulation/basic">
-            /discrete-field-simulation/basic
-          </a>
+          See this simulator at{' '}
+          <a href="/discrete-field-simulation">/discrete-field-simulation</a>
           <br />
           Left: Wave magnitude from a pixelated wave experiment at{' '}
           <Tex>{`t=∞`}</Tex> <br />
@@ -577,10 +574,10 @@ const Introduction = () => {
         />
         <p>
           See this simulator in-action at{' '}
-          <a href="/particles-simulation">/particles-simulation</a>
+          <a href="/particle-simulation">/particle-simulation</a>
           <br />
           See an in-depth analysis of this simulator at{' '}
-          <a href="/particles-text">/particles-text</a>
+          <a href="/particle-simulation/text">/particle-simulation/text</a>
         </p>
       </div>
       <p>

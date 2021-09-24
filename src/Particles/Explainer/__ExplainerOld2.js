@@ -1,6 +1,6 @@
 import React from 'react'
 import AnalysisDisplayTable from '../analysis/AnalysisDisplayTable'
-import Tex from '../Tex'
+import Tex from '../../Text/Tex'
 
 // stats,
 // showBitsPolymorphismNote,
