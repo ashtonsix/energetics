@@ -813,9 +813,8 @@ const ExplainerIntro = () => {
         emerge and interact, and other such things. But I haven't had enough
         time to do all the work and write everything down. So we're going to
         abruptly end the essay here. Thank you for reading, check out my other
-        work at <a href="/introduction">/introduction</a>, and see{' '}
-        <a href="/roadmap">/roadmap</a> for a glimpse of what to expect in the
-        future. If you want to say hi, email me at{' '}
+        work at <a href="/introduction">/introduction</a>. If you want to say
+        hi, email me at{' '}
         <a target="_blank" rel="noopener" href="mailto:me@ashtonsix.com">
           me@ashtonsix.com
         </a>
