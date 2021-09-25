@@ -51,7 +51,7 @@ const ExplainerMethodology = () => {
         <span style={{padding: 10, textAlign: 'center'}}>
           <img
             style={{padding: 10, border: '1px solid #ccc'}}
-            alt="smooth_shear"
+            alt="methodology 1"
             src="/particle-txt/methodology_1.png"
           />
           <p>
@@ -63,7 +63,7 @@ const ExplainerMethodology = () => {
         <span style={{padding: 10, textAlign: 'center'}}>
           <img
             style={{padding: 10, border: '1px solid #ccc'}}
-            alt="rough_lines_1"
+            alt="methodology 2"
             src="/particle-txt/methodology_2.png"
           />
           <p>
@@ -90,7 +90,7 @@ const ExplainerMethodology = () => {
         <span style={{padding: 10, textAlign: 'center'}}>
           <img
             style={{padding: 10, border: '1px solid #ccc'}}
-            alt="smooth_shear"
+            alt="methodology 3"
             src="/particle-txt/methodology_3.png"
           />
           <p>Particle View</p>
@@ -98,7 +98,7 @@ const ExplainerMethodology = () => {
         <span style={{padding: 10, textAlign: 'center'}}>
           <img
             style={{padding: 10, border: '1px solid #ccc'}}
-            alt="rough_lines_1"
+            alt="methodology 4"
             src="/particle-txt/methodology_4.png"
           />
           <p>Triangulation View</p>
@@ -106,7 +106,7 @@ const ExplainerMethodology = () => {
         <span style={{padding: 10, textAlign: 'center'}}>
           <img
             style={{padding: 10, border: '1px solid #ccc'}}
-            alt="rough_lines_1"
+            alt="methodology 5"
             src="/particle-txt/methodology_5.png"
           />
           <p>With More Particles</p>
@@ -208,7 +208,7 @@ const ExplainerMethodology = () => {
         <span style={{padding: 10, textAlign: 'center'}}>
           <img
             style={{padding: 10, height: 180, border: '1px solid #ccc'}}
-            alt="smooth_shear"
+            alt="structure 1"
             src="/particle-txt/structure_1.png"
           />
           <p>
@@ -218,7 +218,7 @@ const ExplainerMethodology = () => {
         <span style={{padding: 10, textAlign: 'center'}}>
           <img
             style={{padding: 10, height: 180, border: '1px solid #ccc'}}
-            alt="rough_lines_1"
+            alt="structure 2"
             src="/particle-txt/structure_2.png"
           />
           <p>
@@ -235,7 +235,7 @@ const ExplainerMethodology = () => {
         <span style={{padding: 10, textAlign: 'center'}}>
           <img
             style={{padding: 10, height: 180, border: '1px solid #ccc'}}
-            alt="smooth_shear"
+            alt="analysis 2"
             src="/particle-txt/analysis_2.png"
           />
           <p>
@@ -249,7 +249,7 @@ const ExplainerMethodology = () => {
         <span style={{padding: 10, textAlign: 'center'}}>
           <img
             style={{padding: 10, height: 180, border: '1px solid #ccc'}}
-            alt="rough_lines_1"
+            alt="analysis 1"
             src="/particle-txt/analysis_1.png"
           />
           <p>
@@ -449,7 +449,7 @@ const ExplainerMethodology = () => {
         <span style={{padding: 10, textAlign: 'center'}}>
           <img
             style={{padding: 10, height: 180, border: '1px solid #ccc'}}
-            alt="smooth_shear"
+            alt="tree 1"
             src="/particle-txt/tree_1.png"
           />
           <p>Minimum Spanning Tree</p>
@@ -457,7 +457,7 @@ const ExplainerMethodology = () => {
         <span style={{padding: 10, textAlign: 'center'}}>
           <img
             style={{padding: 10, height: 180, border: '1px solid #ccc'}}
-            alt="rough_lines_1"
+            alt="tree 2"
             src="/particle-txt/tree_2.png"
           />
           <p>With more particles</p>
@@ -573,7 +573,7 @@ const ExplainerMethodology = () => {
       <div style={{textAlign: 'center'}}>
         <img
           style={{padding: 10, border: '1px solid #ccc'}}
-          alt="valve"
+          alt="collisions state"
           src="/particle-txt/collisions-state.jpg"
         />
         <p>

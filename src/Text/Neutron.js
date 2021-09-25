@@ -29,7 +29,7 @@ const NeutronAsAnEcosystem = () => {
         <span style={{padding: 10, textAlign: 'center'}}>
           <img
             style={{height: 192, padding: 10, border: '1px solid #ccc'}}
-            alt="smooth_shear"
+            alt="beta decay potential"
             src="/neutron/beta-decay-potential.png"
           />
           <p>
@@ -44,7 +44,7 @@ const NeutronAsAnEcosystem = () => {
         <span style={{padding: 10, textAlign: 'center'}}>
           <img
             style={{padding: 10, height: 192, border: '1px solid #ccc'}}
-            alt="rough_lines_1"
+            alt="beta decay billiard"
             src="/neutron/beta-decay-billiard.png"
           />
           <p>Billiard Balls</p>
@@ -52,7 +52,7 @@ const NeutronAsAnEcosystem = () => {
         <span style={{padding: 10, textAlign: 'center'}}>
           <img
             style={{padding: 10, height: 192, border: '1px solid #ccc'}}
-            alt="rough_lines_1"
+            alt="beta decay feynmann"
             src="/neutron/beta-decay-feynmann.png"
           />
           <p>Feynmann Diagram</p>
@@ -83,7 +83,7 @@ const NeutronAsAnEcosystem = () => {
             padding: 10,
             border: '1px solid #ccc',
           }}
-          alt="rough_lines_2"
+          alt="neutron proton top cutaway"
           src="/neutron/neutron_proton_top_cutaway.png"
         />
         <p style={{width: 450, margin: '0 auto'}}>
@@ -128,7 +128,7 @@ const NeutronAsAnEcosystem = () => {
             padding: 10,
             border: '1px solid #ccc',
           }}
-          alt="rough_lines_2"
+          alt="rough 2"
           src="/neutron/rough_2.png"
         />
         <p style={{width: 640, margin: '0 auto'}}>
@@ -188,7 +188,7 @@ const NeutronAsAnEcosystem = () => {
             padding: 10,
             border: '1px solid #ccc',
           }}
-          alt="rough_lines_2"
+          alt="hypersphere outline"
           src="/neutron/hypersphere_outline.png"
         />
         <p style={{width: 510, margin: '0 auto'}}>
@@ -237,7 +237,7 @@ const NeutronAsAnEcosystem = () => {
         <span style={{padding: 10, textAlign: 'center'}}>
           <img
             style={{padding: 10, height: 192, border: '1px solid #ccc'}}
-            alt="rough_lines_1"
+            alt="rough 1"
             src="/neutron/rough_1.png"
           />
           <p>Proton and neutron</p>
@@ -245,7 +245,7 @@ const NeutronAsAnEcosystem = () => {
         <span style={{padding: 10, textAlign: 'center'}}>
           <img
             style={{padding: 10, height: 192, border: '1px solid #ccc'}}
-            alt="rough_lines_1"
+            alt="rough 2"
             src="/neutron/rough_2.png"
           />
           <p>Deuterium</p>
@@ -256,7 +256,7 @@ const NeutronAsAnEcosystem = () => {
         <span style={{padding: 10, textAlign: 'center'}}>
           <img
             style={{padding: 10, height: 150, border: '1px solid #ccc'}}
-            alt="rough_lines_1"
+            alt="rough 3"
             src="/neutron/rough_3.png"
           />
           <p>Vortex Ring. Has both negative and positive curl</p>
@@ -267,7 +267,7 @@ const NeutronAsAnEcosystem = () => {
         <span style={{padding: 10, textAlign: 'center'}}>
           <img
             style={{padding: 10, height: 192, border: '1px solid #ccc'}}
-            alt="rough_lines_1"
+            alt="rough 4"
             src="/neutron/rough_4.png"
           />
           <p>

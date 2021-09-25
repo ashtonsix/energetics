@@ -53,7 +53,7 @@ export default (
       <span style={{width: 364, padding: 10, textAlign: 'center'}}>
         <img
           style={{padding: 10, width: 342, border: '1px solid #ccc'}}
-          alt="pion_jefferson"
+          alt="pion jefferson"
           src="/vector-field-txt/pion_jefferson.png"
         />
         <p>

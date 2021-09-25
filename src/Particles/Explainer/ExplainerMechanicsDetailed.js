@@ -522,7 +522,7 @@ export const Explainer = () => {
         geometry):
       </p>
       <img
-        alt="experiments"
+        alt="boundary"
         src="/explainer/boundary.jpg"
         style={{maxWidth: '100%'}}
         loading="lazy"

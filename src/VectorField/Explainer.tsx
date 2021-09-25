@@ -16,7 +16,7 @@ const ExplainerIntro = () => {
       <div style={{textAlign: 'center'}}>
         <img
           style={{maxWidth: '100%', padding: 10, border: '1px solid #ccc'}}
-          alt="mechanics_1"
+          alt="mechanics 1"
           src="/vector-field-txt/mechanics_1.png"
         />
       </div>
@@ -53,7 +53,7 @@ const ExplainerIntro = () => {
             padding: 10,
             border: '1px solid #ccc',
           }}
-          alt="mechanics_2"
+          alt="mechanics 2"
           src="/vector-field-txt/mechanics_2.png"
         />
       </div>
@@ -66,7 +66,7 @@ const ExplainerIntro = () => {
             padding: 10,
             border: '1px solid #ccc',
           }}
-          alt="mechanics_3"
+          alt="mechanics 3"
           src="/vector-field-txt/mechanics_3.png"
         />
       </div>
@@ -96,7 +96,7 @@ const ExplainerIntro = () => {
         <span style={{width: 264, padding: 10, textAlign: 'center'}}>
           <img
             style={{padding: 10, border: '1px solid #ccc'}}
-            alt="vortex_field"
+            alt="vortex field"
             src="/vector-field-txt/vortex_field.png"
           />
           <p>Field Vortex</p>
@@ -104,7 +104,7 @@ const ExplainerIntro = () => {
         <span style={{width: 264, padding: 10, textAlign: 'center'}}>
           <img
             style={{padding: 10, border: '1px solid #ccc'}}
-            alt="vortex_particles"
+            alt="vortex particles"
             src="/vector-field-txt/vortex_particles.png"
           />
           <p>Particle Vortex</p>
@@ -125,7 +125,7 @@ const ExplainerIntro = () => {
         <span style={{padding: 10, textAlign: 'center'}}>
           <img
             style={{width: 150, padding: 10, border: '1px solid #ccc'}}
-            alt="phenotype_1"
+            alt="phenotype 1"
             src="/vector-field-txt/phenotype_1.png"
           />
           <p>Single</p>
@@ -133,7 +133,7 @@ const ExplainerIntro = () => {
         <span style={{padding: 10, textAlign: 'center'}}>
           <img
             style={{width: 150, padding: 10, border: '1px solid #ccc'}}
-            alt="phenotype_2"
+            alt="phenotype 2"
             src="/vector-field-txt/phenotype_2.png"
           />
           <p>Double</p>
@@ -141,7 +141,7 @@ const ExplainerIntro = () => {
         <span style={{padding: 10, textAlign: 'center'}}>
           <img
             style={{width: 150, padding: 10, border: '1px solid #ccc'}}
-            alt="phenotype_3"
+            alt="phenotype 3"
             src="/vector-field-txt/phenotype_3.png"
           />
           <p>Quadruple</p>
@@ -149,7 +149,7 @@ const ExplainerIntro = () => {
         <span style={{padding: 10, textAlign: 'center'}}>
           <img
             style={{width: 150, padding: 10, border: '1px solid #ccc'}}
-            alt="phenotype_4"
+            alt="phenotype 4"
             src="/vector-field-txt/phenotype_4.png"
           />
           <p>Tile</p>
@@ -184,7 +184,7 @@ const ExplainerIntro = () => {
         <span style={{padding: 10, textAlign: 'center'}}>
           <img
             style={{padding: 10, border: '1px solid #ccc'}}
-            alt="orbital_1"
+            alt="orbital 1"
             src="/vector-field-txt/orbital_1.png"
           />
           <p>Magnitude</p>
@@ -192,7 +192,7 @@ const ExplainerIntro = () => {
         <span style={{padding: 10, textAlign: 'center'}}>
           <img
             style={{padding: 10, border: '1px solid #ccc'}}
-            alt="orbital_2"
+            alt="orbital 2"
             src="/vector-field-txt/orbital_2.png"
           />
           <p>Change in magnitude</p>
@@ -209,7 +209,7 @@ const ExplainerIntro = () => {
         <span style={{padding: 10, textAlign: 'center'}}>
           <img
             style={{padding: 10, border: '1px solid #ccc'}}
-            alt="resonance_0"
+            alt="resonance 0"
             src="/vector-field-txt/resonance_0.png"
           />
           <p>Magnitude</p>
@@ -217,7 +217,7 @@ const ExplainerIntro = () => {
         <span style={{padding: 10, textAlign: 'center'}}>
           <img
             style={{padding: 10, border: '1px solid #ccc'}}
-            alt="resonance_1"
+            alt="resonance 1"
             src="/vector-field-txt/resonance_1.png"
           />
           <p>Change in magnitude</p>
@@ -248,7 +248,7 @@ const ExplainerIntro = () => {
         <span style={{padding: 10, textAlign: 'center'}}>
           <img
             style={{padding: 10, border: '1px solid #ccc'}}
-            alt="resonance_2"
+            alt="resonance 2"
             src="/vector-field-txt/resonance_2.png"
           />
           <p>t=1</p>
@@ -256,7 +256,7 @@ const ExplainerIntro = () => {
         <span style={{padding: 10, textAlign: 'center'}}>
           <img
             style={{padding: 10, border: '1px solid #ccc'}}
-            alt="resonance_3"
+            alt="resonance 3"
             src="/vector-field-txt/resonance_3.png"
           />
           <p>t=2</p>
@@ -264,7 +264,7 @@ const ExplainerIntro = () => {
         <span style={{padding: 10, textAlign: 'center'}}>
           <img
             style={{padding: 10, border: '1px solid #ccc'}}
-            alt="resonance_4"
+            alt="resonance 4"
             src="/vector-field-txt/resonance_4.png"
           />
           <p>t=3</p>
@@ -328,7 +328,7 @@ const ExplainerIntro = () => {
         <span style={{padding: 10, textAlign: 'center'}}>
           <img
             style={{height: 192, padding: 10, border: '1px solid #ccc'}}
-            alt="smooth_shear"
+            alt="smooth shear"
             src="/vector-field-txt/smooth_shear.png"
           />
           <p>Smooth shear lines</p>
@@ -336,7 +336,7 @@ const ExplainerIntro = () => {
         <span style={{width: 364, padding: 10, textAlign: 'center'}}>
           <img
             style={{padding: 10, height: 192, border: '1px solid #ccc'}}
-            alt="rough_lines_1"
+            alt="rough lines 1"
             src="/vector-field-txt/rough_lines_1.png"
           />
           <p>
@@ -362,7 +362,7 @@ const ExplainerIntro = () => {
             padding: 10,
             border: '1px solid #ccc',
           }}
-          alt="rough_lines_2"
+          alt="rough lines 2"
           src="/vector-field-txt/rough_lines_2.png"
         />
         <p>Rough shear lines go straight when there's just one particle</p>
@@ -563,7 +563,7 @@ const ExplainerIntro = () => {
         <span style={{padding: 10, textAlign: 'center'}}>
           <img
             style={{height: 192, padding: 10, border: '1px solid #ccc'}}
-            alt="smooth_shear"
+            alt="explanation 1"
             src="/vector-field-txt/explanation_1.png"
           />
           <p>Expansion</p>
@@ -571,7 +571,7 @@ const ExplainerIntro = () => {
         <span style={{padding: 10, textAlign: 'center'}}>
           <img
             style={{padding: 10, height: 192, border: '1px solid #ccc'}}
-            alt="rough_lines_1"
+            alt="explanation 2"
             src="/vector-field-txt/explanation_2.png"
           />
           <p>Compression</p>

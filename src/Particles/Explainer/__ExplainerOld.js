@@ -153,14 +153,14 @@ export const Explainer = () => {
       <p style={{fontWeight: 'bold'}}>Example 2: images</p>
       <p style={{fontWeight: 'bold'}}>
         <img
-          alt="simple squares"
+          alt="disorder 0"
           src="/explainer/disorder_0.png"
           loading="lazy"
           style={{verticalAlign: 'middle', padding: '2px 0'}}
         />{' '}
         vs.{' '}
         <img
-          alt="chaotic noise"
+          alt="disorder 1"
           src="/explainer/disorder_1.bmp"
           loading="lazy"
           style={{verticalAlign: 'middle', padding: '2px 0'}}
@@ -170,35 +170,35 @@ export const Explainer = () => {
         Kolgomorov. After trying to get the filesize of each image as small as
         possible,{' '}
         <img
-          alt="simple squares"
+          alt="disorder 0"
           src="/explainer/disorder_0.png"
           loading="lazy"
           style={{verticalAlign: 'middle', padding: '2px 0'}}
         />{' '}
         came out as 107 bytes, and{' '}
         <img
-          alt="simple squares"
+          alt="disorder 1"
           src="/explainer/disorder_1.bmp"
           loading="lazy"
           style={{verticalAlign: 'middle', padding: '2px 0'}}
         />{' '}
         came out as 2,112 bytes, so{' '}
         <img
-          alt="simple squares"
+          alt="disorder 0"
           src="/explainer/disorder_0.png"
           loading="lazy"
           style={{verticalAlign: 'middle', padding: '2px 0'}}
         />{' '}
         is less disordered. With an inexact but similar reproduction of{' '}
         <img
-          alt="simple squares"
+          alt="disorder 1"
           src="/explainer/disorder_1.bmp"
           loading="lazy"
           style={{verticalAlign: 'middle', padding: '2px 0'}}
         />
         , like this:{' '}
         <img
-          alt="simple squares"
+          alt="disorder 1"
           src="/explainer/disorder_1.jpg"
           loading="lazy"
           style={{verticalAlign: 'middle', padding: '2px 0'}}
@@ -212,14 +212,14 @@ export const Explainer = () => {
         environment: A small square was added to each image, how accurately
         could someone identify the colour and location of the small square?{' '}
         <img
-          alt="simple squares"
+          alt="disorder 2"
           src="/explainer/disorder_2.png"
           loading="lazy"
           style={{verticalAlign: 'middle', padding: '2px 0'}}
         />{' '}
         vs.{' '}
         <img
-          alt="simple squares"
+          alt="disorder 3"
           src="/explainer/disorder_3.bmp"
           loading="lazy"
           style={{verticalAlign: 'middle', padding: '2px 0'}}
@@ -252,14 +252,14 @@ export const Explainer = () => {
       <p style={{fontWeight: 'bold'}}>Example 3: downhill slopes</p>
       <p style={{fontWeight: 'bold'}}>
         <img
-          alt="rough slope"
+          alt="slope 0"
           src="/explainer/slope_0.png"
           loading="lazy"
           style={{height: 120}}
         />{' '}
         vs.{' '}
         <img
-          alt="smooth slope"
+          alt="slope 1"
           src="/explainer/slope_1.png"
           loading="lazy"
           style={{height: 120}}
@@ -316,7 +316,7 @@ export const Explainer = () => {
         boundaries.
       </p>
       <img
-        alt="experiments"
+        alt="thermodynamics 1"
         src="/explainer/thermodynamics_1.jpg"
         style={{maxWidth: '100%'}}
         loading="lazy"
@@ -330,7 +330,7 @@ export const Explainer = () => {
         disorder modes:
       </p>
       <img
-        alt="experiments"
+        alt="disorder stats"
         src="/explainer/disorder_stats.png"
         style={{maxWidth: '100%'}}
         loading="lazy"
@@ -361,7 +361,7 @@ export const Explainer = () => {
         space will be flat and have infinite minimums, indicating the presence
         of chaos. (Lorenz). There are some boundary shapes (eg,{' '}
         <img
-          alt="simple squares"
+          alt="lorenz pressure"
           src="/explainer/lorenz_pressure.jpg"
           loading="lazy"
           style={{verticalAlign: 'middle', padding: '2px 0'}}

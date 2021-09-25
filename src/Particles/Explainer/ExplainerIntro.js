@@ -31,7 +31,7 @@ const ExplainerIntro = () => {
         <span style={{padding: 10, textAlign: 'center'}}>
           <img
             style={{height: 200}}
-            alt="Example #1"
+            alt="simple collision 1"
             src="/particle-txt/simple_collision_1.png"
           />
           <p>Before Collision</p>
@@ -39,16 +39,16 @@ const ExplainerIntro = () => {
         <span style={{padding: 10, textAlign: 'center', position: 'relative'}}>
           <img
             style={{height: 294, position: 'absolute', top: -50, left: 50}}
-            alt="Example #2"
+            alt="simple collision 2"
             src="/particle-txt/simple_collision_2.png"
           />
-          <div style={{height: 200}}></div>
+          <img alt="" style={{height: 200}}></img>
           <p>Elastic Scattering</p>
         </span>
         <span style={{padding: 10, textAlign: 'center'}}>
           <img
             style={{height: 200}}
-            alt="Example #3"
+            alt="simple collision 3"
             src="/particle-txt/simple_collision_3.png"
           />
           <p>
@@ -60,7 +60,7 @@ const ExplainerIntro = () => {
         <span style={{padding: 10, textAlign: 'center'}}>
           <img
             style={{height: 200}}
-            alt="Example #3"
+            alt="simple collision 4"
             src="/particle-txt/simple_collision_4.png"
           />
           <p>
@@ -75,7 +75,7 @@ const ExplainerIntro = () => {
         experiments, starting from random initial states
       </p>
       <img
-        alt="experiments"
+        alt="inelastic"
         src="/explainer/inelastic.jpg"
         style={{maxWidth: '100%'}}
         loading="lazy"
@@ -91,19 +91,19 @@ const ExplainerIntro = () => {
       </p>
       <div style={{display: 'flex', justifyContent: 'space-evenly'}}>
         <img
-          alt="circle arena"
+          alt="billiards circle"
           src="/explainer/billiards_circle.png"
           style={{maxWidth: 'min(270px, 30%)'}}
           loading="lazy"
         />
         <img
-          alt="sinai arena"
+          alt="billiards sinai"
           src="/explainer/billiards_sinai.png"
           style={{maxWidth: 'min(270px, 30%)'}}
           loading="lazy"
         />
         <img
-          alt="maze arena"
+          alt="billiards maze"
           src="/explainer/billiards_maze.png"
           style={{maxWidth: 'min(270px, 30%)'}}
           loading="lazy"

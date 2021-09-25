@@ -44,7 +44,7 @@ const Introduction = () => {
         <span style={{width: 222, padding: 10, textAlign: 'center'}}>
           <img
             style={{padding: 10, border: '1px solid #ccc'}}
-            alt="Example #1"
+            alt="img disorder low"
             src="/introduction/img_disorder_low.png"
           />
           <p>Low Disorder</p>
@@ -52,7 +52,7 @@ const Introduction = () => {
         <span style={{width: 222, padding: 10, textAlign: 'center'}}>
           <img
             style={{padding: 10, border: '1px solid #ccc'}}
-            alt="Example #2"
+            alt="img disorder high"
             src="/introduction/img_disorder_high.png"
           />
           <p>
@@ -63,7 +63,7 @@ const Introduction = () => {
         <span style={{width: 222, padding: 10, textAlign: 'center'}}>
           <img
             style={{padding: 10, border: '1px solid #ccc'}}
-            alt="Example #3"
+            alt="img disorder blended"
             src="/introduction/img_disorder_blended.png"
           />
           <p>
@@ -100,7 +100,7 @@ const Introduction = () => {
         >
           <img
             style={{padding: 10, border: '1px solid #ccc'}}
-            alt="Example #1"
+            alt="img disorder low"
             src="/introduction/img_disorder_low.png"
           />
           <p>
@@ -124,7 +124,7 @@ const Introduction = () => {
         >
           <img
             style={{padding: 10, border: '1px solid #ccc'}}
-            alt="Example #2"
+            alt="img disorder high"
             src="/introduction/img_disorder_high.png"
           />
           <p>
@@ -148,7 +148,7 @@ const Introduction = () => {
         >
           <img
             style={{padding: 10, border: '1px solid #ccc'}}
-            alt="Example #3"
+            alt="img disorder mid"
             src="/introduction/img_disorder_mid.png"
           />
           <p>
@@ -516,7 +516,7 @@ const Introduction = () => {
       </p>
       <img
         style={{maxWidth: '100%', padding: 10, border: '1px solid #ccc'}}
-        alt="vector"
+        alt="discrete field 1"
         src="/introduction/discrete_field_1.png"
       />
       <p>
@@ -548,7 +548,7 @@ const Introduction = () => {
       <div style={{textAlign: 'center'}}>
         <img
           style={{maxWidth: '100%', padding: 10, border: '1px solid #ccc'}}
-          alt="vector"
+          alt="discrete field 2"
           src="/introduction/discrete_field_2.png"
         />
         <p>
@@ -569,7 +569,7 @@ const Introduction = () => {
       <div style={{textAlign: 'center'}}>
         <img
           style={{maxWidth: '100%', padding: 10, border: '1px solid #ccc'}}
-          alt="vector"
+          alt="particles"
           src="/introduction/particles.jpg"
         />
         <p>
